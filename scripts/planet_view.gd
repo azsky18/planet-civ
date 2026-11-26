@@ -433,7 +433,9 @@ func _build_rivers() -> void:
 		if gen.c_river[d] == 1:
 			w1 = hs.spacing * (0.07 + 0.2 * sqrt(gen.c_flow[d] / max_flow))
 		var dirv: Vector3 = (pd - pf).normalized()
-		var pts: Array = [pf - dirv * w0 * 0.5, pd + dirv * w1 * 0.5]
+		var pts: Array = [pf, pd]
+		# 꺾이는 꼭짓점은 둥근 이음매(원판)로 메워 모서리가 튀어나오지 않게 한다
+		_disc(pos, idx, pf, pf.normalized(), w0 * 0.5)
 		_strip(pos, idx, pts, w0, w1)
 	var m := ArrayMesh.new()
 	if pos.size() > 0:
@@ -482,11 +484,11 @@ func _disc(pos: PackedVector3Array, idx: PackedInt32Array, c: Vector3, nrm: Vect
 	var b: Vector3 = nrm.cross(t)
 	var s: int = pos.size()
 	pos.append(c)
-	for k in 6:
-		var a: float = TAU * k / 6.0
+	for k in 16:
+		var a: float = TAU * k / 16.0
 		pos.append(c + (t * cos(a) + b * sin(a)) * r)
-	for k in 6:
-		idx.append_array([s, s + 1 + k, s + 1 + (k + 1) % 6])
+	for k in 16:
+		idx.append_array([s, s + 1 + k, s + 1 + (k + 1) % 16])
 
 
 ## 타일 경계선. 육지 위에만 그린다.

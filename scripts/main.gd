@@ -5,7 +5,7 @@ const LEVELS := [5, 6, 7]
 const LEVEL_LABELS := ["작게 (10,242칸)", "보통 (40,962칸)", "크게 (163,842칸, 느림)"]
 const MODE_LABELS := ["지형", "고도", "기온", "강수량", "판 구조", "기압과 바람", "식생"]
 ## 화면에 표시되는 빌드 이름. PC에서 어떤 버전이 실행 중인지 확인하는 용도.
-const BUILD := "v6 타일 레이어 (지형·기후 / 식생 / 시설물)"
+const BUILD := "v6.2 강 이음매 정리, 근접 기울임 시점"
 const COMPASS := ["북", "북동", "동", "남동", "남", "남서", "서", "북서"]
 
 var hs := HexSphere.new()
@@ -318,7 +318,7 @@ func _setup_ui() -> void:
 
 	# 아래: 조작법
 	var help := Label.new()
-	help.text = "드래그: 회전   휠: 확대/축소   클릭: 타일 고정   방향키: 회전   R: 북쪽 정렬\n고정한 타일에 시험: 1 벌목  2 배수  3 경작지  4 도로  5 정착지 구역  T 10턴 진행"
+	help.text = "드래그: 회전   휠: 확대/축소 (가까이 가면 비스듬한 시점)   클릭: 타일 고정   방향키: 회전   R: 북쪽 정렬\n고정한 타일에 시험: 1 벌목  2 배수  3 경작지  4 도로  5 정착지 구역  T 10턴 진행"
 	help.add_theme_font_size_override("font_size", 12)
 	help.add_theme_color_override("font_color", Color("9f906c"))
 	help.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
@@ -476,9 +476,18 @@ func _regenerate() -> void:
 
 # ---------------------------------------------------------------- 카메라와 입력
 
+## 멀리서는 행성 전체를 정면으로 보고, 가까이 갈수록 카메라가 지평선 쪽으로 기울어
+## 문명 시리즈처럼 비스듬히 내려다보는 시점이 된다.
 func _update_camera() -> void:
 	pivot.rotation = Vector3(pitch, yaw, 0)
-	cam.position = Vector3(0, 0, dist)
+	var h: float = dist - 1.0
+	var tilt: float = deg_to_rad(58.0) * (1.0 - smoothstep(0.06, 0.8, h))
+	var out: Vector3 = pivot.basis.z.normalized()
+	var upv: Vector3 = pivot.basis.y.normalized()
+	var target: Vector3 = out
+	var cam_pos: Vector3 = target + out * (h * cos(tilt)) - upv * (h * sin(tilt))
+	var up: Vector3 = (upv * cos(tilt) + out * sin(tilt)).normalized()
+	cam.look_at_from_position(cam_pos, target, up)
 	sun.rotation = Vector3(deg_to_rad(-20) + pitch * 0.5, yaw - deg_to_rad(35), 0)
 
 
@@ -507,9 +516,9 @@ func _unhandled_input(event: InputEvent) -> void:
 					selected = -1 if selected == hover else hover
 					_update_info()
 		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_UP:
-			dist_target = clampf(dist_target - (dist_target - 1.0) * 0.15, 1.06, 8.0)
+			dist_target = clampf(dist_target - (dist_target - 1.0) * 0.15, 1.025, 8.0)
 		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			dist_target = clampf(dist_target + (dist_target - 1.0) * 0.15, 1.06, 8.0)
+			dist_target = clampf(dist_target + (dist_target - 1.0) * 0.15, 1.025, 8.0)
 	elif event is InputEventMouseMotion:
 		var mm := event as InputEventMouseMotion
 		if dragging:
