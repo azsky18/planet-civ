@@ -562,7 +562,11 @@ func _update_info() -> void:
 	if gen.is_lake[i] == 1:
 		water = "호수"
 	elif gen.is_river[i] == 1:
-		water = "강 (유량 %s)" % _num(gen.flow[i])
+		var sides: int = 0
+		for k in hs.degree(i):
+			if gen.river_mask[i] & (1 << k):
+				sides += 1
+		water = "강변 (변 %d개에 강)" % sides
 	elif gen.elevation[i] >= 0.0:
 		water = "없음"
 	var lines: Array = []

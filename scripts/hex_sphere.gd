@@ -20,6 +20,8 @@ var corner_face := PackedInt32Array()
 ## 면(꼭짓점) 위치와, 그 꼭짓점을 공유하는 세 타일
 var face_centers := PackedVector3Array()
 var face_tiles := PackedInt32Array()
+## 면(꼭짓점)마다 이웃 면 3개. 꼭짓점 사이를 잇는 선이 곧 칸의 변이다.
+var face_nb := PackedInt32Array()
 ## 이웃 타일 사이 평균 각거리 (라디안)
 var spacing: float = 0.0
 
@@ -83,6 +85,24 @@ func build(subdiv: int) -> void:
 
 	face_centers = face_center
 	face_tiles = faces
+	var edge_faces := {}
+	face_nb.resize(face_count * 3)
+	face_nb.fill(-1)
+	for f in face_count:
+		for e in 3:
+			var a: int = faces[f * 3 + e]
+			var b: int = faces[f * 3 + (e + 1) % 3]
+			var key: int = mini(a, b) * 1000000 + maxi(a, b)
+			if edge_faces.has(key):
+				var g: int = edge_faces[key]
+				face_nb[f * 3 + e] = g
+				for e2 in 3:
+					var a2: int = faces[g * 3 + e2]
+					var b2: int = faces[g * 3 + (e2 + 1) % 3]
+					if mini(a2, b2) == mini(a, b) and maxi(a2, b2) == maxi(a, b):
+						face_nb[g * 3 + e2] = f
+			else:
+				edge_faces[key] = f
 	nb_offsets.resize(count + 1)
 	nb_list = PackedInt32Array()
 	corner_list = PackedVector3Array()

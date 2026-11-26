@@ -381,84 +381,65 @@ func surface_point(dir: Vector3, hint: int) -> Vector3:
 	return dir * tile_radius[t]
 
 
-func _jitter_dir(i: int) -> Vector3:
-	var c: Vector3 = hs.centers[i]
-	var h1: float = _hash01(i * 3 + 1) - 0.5
-	var h2: float = _hash01(i * 7 + 2) - 0.5
-	var en: Array = WorldGen.east_north(c)
-	return (c + ((en[0] as Vector3) * h1 + (en[1] as Vector3) * h2) * hs.spacing * 0.7).normalized()
+func _face_pos(f: int) -> Vector3:
+	return hs.face_centers[f] * corner_radius[f]
 
 
-static func _bez(a: Vector3, c: Vector3, b: Vector3, t: float) -> Vector3:
+static func _bez3(a: Vector3, c: Vector3, b: Vector3, t: float) -> Vector3:
 	var u: float = 1.0 - t
-	return (a * (u * u) + c * (2.0 * u * t) + b * (t * t)).normalized()
+	return a * (u * u) + c * (2.0 * u * t) + b * (t * t)
 
 
+## 경계 강: 꼭짓점과 칸의 변을 따라 그린다. 꺾이는 꼭짓점은 살짝 둥글린다.
 func _build_rivers() -> void:
 	var pos := PackedVector3Array()
 	var idx := PackedInt32Array()
-	var n: int = hs.count
+	var F: int = hs.face_centers.size()
 	var max_flow: float = 1.0
 	var main_up := PackedInt32Array()
-	main_up.resize(n)
+	main_up.resize(F)
 	main_up.fill(-1)
-	for i in n:
-		if gen.is_river[i] == 0:
+	for f in F:
+		if gen.c_river[f] == 0:
 			continue
-		max_flow = maxf(max_flow, gen.flow[i])
-		var d: int = gen.downstream[i]
-		if d >= 0 and (main_up[d] < 0 or gen.flow[i] > gen.flow[main_up[d]]):
-			main_up[d] = i
-	var ctrl := {}
-	for i in n:
-		if gen.is_river[i] == 1:
-			ctrl[i] = _jitter_dir(i)
-	var lift: float = 0.0015 * maxf(exaggeration, 0.5)
-	const SAMPLES := 10
-	for i in n:
-		if gen.is_river[i] == 0:
+		max_flow = maxf(max_flow, gen.c_flow[f])
+		var d: int = gen.c_down[f]
+		if d >= 0 and (main_up[d] < 0 or gen.c_flow[f] > gen.c_flow[main_up[d]]):
+			main_up[d] = f
+	var lift: float = 0.0016 * maxf(exaggeration, 0.5)
+	const SAMPLES := 8
+	for f in F:
+		if gen.c_river[f] == 0:
 			continue
-		var d: int = gen.downstream[i]
+		var d: int = gen.c_down[f]
 		if d < 0:
 			continue
-		var ci: Vector3 = ctrl[i]
-		var d_water: bool = gen.elevation[d] < 0.0 or gen.is_lake[d] == 1
-		var cd: Vector3 = ctrl[d] if ctrl.has(d) else hs.centers[d]
-		var start: Vector3 = ci
-		if main_up[i] >= 0:
-			start = ((ctrl[main_up[i]] as Vector3) + ci).normalized()
-		var end: Vector3 = (ci + cd).normalized()
-		if d_water:
-			end = (ci * 0.3 + cd * 0.7).normalized()   # 물 안쪽까지 이어서 하구가 끊기지 않게
-		elif main_up[d] != i:
-			# 지류: 본류 곡선의 가운데 점으로 합류
-			var ms: Vector3 = cd
+		var pf: Vector3 = _face_pos(f)
+		var pd: Vector3 = _face_pos(d)
+		var start: Vector3 = pf
+		if main_up[f] >= 0:
+			start = (_face_pos(main_up[f]) + pf) * 0.5
+		var end: Vector3 = (pf + pd) * 0.5
+		var d_sink: bool = gen.c_river[d] == 0
+		if d_sink:
+			end = pd
+		elif main_up[d] != f:
+			var ms: Vector3 = pd
 			if main_up[d] >= 0:
-				ms = ((ctrl[main_up[d]] as Vector3) + cd).normalized()
-			var dd: int = gen.downstream[d]
-			var me: Vector3 = cd
-			if dd >= 0:
-				me = (cd + (ctrl[dd] if ctrl.has(dd) else hs.centers[dd])).normalized()
-			end = _bez(ms, cd, me, 0.5)
-		var w0: float = hs.spacing * (0.08 + 0.2 * sqrt(gen.flow[i] / max_flow))
-		var w1: float = w0
-		if not d_water and gen.is_river[d] == 1:
-			w1 = hs.spacing * (0.08 + 0.2 * sqrt(gen.flow[d] / max_flow))
-		# 평지에서는 조금 더 굽이친다
-		var flat: float = clampf(1.0 - gen.elevation[i] * 4.0, 0.3, 1.0)
-		var amp: float = hs.spacing * 0.14 * flat * (1.0 if _hash01(i + 99) > 0.5 else -1.0)
+				ms = (_face_pos(main_up[d]) + pd) * 0.5
+			var me: Vector3 = pd
+			if gen.c_down[d] >= 0:
+				me = (pd + _face_pos(gen.c_down[d])) * 0.5
+			end = _bez3(ms, pd, me, 0.5)
+		var w0: float = hs.spacing * (0.07 + 0.2 * sqrt(gen.c_flow[f] / max_flow))
+		var w1: float = w0 if d_sink else hs.spacing * (0.07 + 0.2 * sqrt(gen.c_flow[d] / max_flow))
+		var hint: int = hs.face_tiles[f * 3]
 		var pts: Array = []
 		for sidx in SAMPLES + 1:
 			var t: float = float(sidx) / SAMPLES
-			var dir: Vector3 = _bez(start, ci, end, t)
-			var tang: Vector3 = _bez(start, ci, end, minf(t + 0.05, 1.0)) - _bez(start, ci, end, maxf(t - 0.05, 0.0))
-			var side: Vector3 = tang.cross(dir).normalized()
-			dir = (dir + side * amp * sin(TAU * t)).normalized()
-			var p: Vector3 = surface_point(dir, i)
-			var r: float = p.length()
-			if d_water and t > 0.5:
-				var wl: float = lake_level(d) if gen.is_lake[d] == 1 else 1.0
-				r = maxf(r, wl) if t < 0.9 else wl - 0.0005
+			var dir: Vector3 = _bez3(start, pf, end, t).normalized()
+			var p: Vector3 = surface_point(dir, hint)
+			var r: float = maxf(p.length(), 1.0)
 			pts.append(dir * (r + lift))
 		_strip(pos, idx, pts, w0, w1)
 	var m := ArrayMesh.new()

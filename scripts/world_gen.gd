@@ -51,7 +51,14 @@ var precip := PackedFloat32Array()       # mm/년
 var downstream := PackedInt32Array()
 var flow := PackedFloat32Array()
 var filled := PackedFloat32Array()
-var is_river := PackedByteArray()
+var is_river := PackedByteArray()        # 칸의 변 중 하나 이상에 강이 흐름 (강변 칸)
+var river_mask := PackedInt32Array()     # 칸별 비트마스크: k번째 변(이웃 nb_list[off+k] 쪽)에 강이 있으면 1
+var runoff := PackedFloat32Array()       # 칸 자체의 유출량
+# 경계 강: 꼭짓점(삼각형 면) 그래프 위에서 흐른다
+var c_down := PackedInt32Array()         # 꼭짓점의 하류 꼭짓점
+var c_flow := PackedFloat32Array()
+var c_river := PackedByteArray()
+var c_threshold: float = 0.0
 var is_lake := PackedByteArray()
 var is_marsh := PackedByteArray()
 var biome := PackedInt32Array()
@@ -518,6 +525,7 @@ func _make_hydrology() -> void:
 		var i: int = order[idx]
 		var et: float = clampf(250.0 + 28.0 * temperature[i], 50.0, 1300.0)
 		flow[i] = maxf(precip[i] - et * 0.75, precip[i] * 0.08)
+	runoff = flow.duplicate()
 	for idx in range(order.size() - 1, -1, -1):
 		var i: int = order[idx]
 		var d: int = downstream[i]
@@ -560,51 +568,7 @@ func _make_hydrology() -> void:
 			comp.sort_custom(func(x, y): return x[0] > y[0])
 			for m in range(lake_cap, comp.size()):
 				is_lake[comp[m][1]] = 0
-	for i in order:
-		if is_lake[i] == 0 and flow[i] >= river_threshold:
-			is_river[i] = 1
-
-	# 강 정리: 하구(바다나 호수)까지 이어진 수계 단위로 보고, 본류가 짧은 수계는 지운다
-	var chain := PackedInt32Array()     # 그 칸까지 이어진 가장 긴 상류 길이
-	chain.resize(n)
-	for idx in range(order.size() - 1, -1, -1):
-		var i: int = order[idx]
-		if is_river[i] == 0:
-			continue
-		chain[i] = maxi(chain[i], 1)
-		var d: int = downstream[i]
-		if d >= 0 and is_river[d] == 1:
-			chain[d] = maxi(chain[d], chain[i] + 1)
-	var mouth := PackedInt32Array()
-	mouth.resize(n)
-	mouth.fill(-1)
-	for i in order:   # 하류부터: 하류 칸의 하구를 물려받는다
-		if is_river[i] == 0:
-			continue
-		var d: int = downstream[i]
-		if d >= 0 and is_river[d] == 1:
-			mouth[i] = mouth[d]
-		elif d >= 0 and (elevation[d] < 0.0 or is_lake[d] == 1):
-			mouth[i] = i
-		else:
-			mouth[i] = -1   # 물에 닿지 못하는 강
-	var min_len: int = maxi(3, int(round(5.0 * pow(2.0, hs.level - 6))))
-	for i in order:
-		if is_river[i] == 1 and (mouth[i] < 0 or chain[mouth[i]] < min_len):
-			is_river[i] = 0
-	# 본류에 붙은 한두 칸짜리 짧은 지류도 지운다
-	var spur: int = maxi(1, min_len / 3)
-	for i in order:
-		if is_river[i] == 1 and chain[i] <= spur:
-			var d: int = downstream[i]
-			if d >= 0 and is_river[d] == 1 and chain[d] > chain[i] + 1:
-				is_river[i] = 0
-	# 하류가 끊긴 조각 제거 (하류부터 확인)
-	for i in order:
-		if is_river[i] == 1:
-			var d: int = downstream[i]
-			if d < 0 or (is_river[d] == 0 and elevation[d] >= 0.0 and is_lake[d] == 0):
-				is_river[i] = 0
+	_make_edge_rivers()
 
 	# 습지: 평탄한 저지대 + 많은 물 (큰 강 하구, 다습 저지, 한대 소택지)
 	var mn := _noise(4.5, 2, 41)
@@ -634,6 +598,130 @@ func _make_hydrology() -> void:
 			wet += 0.5   # 영구동토 위 소택지
 		if wet + mn.get_noise_3dv(hs.centers[i]) * 0.6 > 1.9:
 			is_marsh[i] = 1
+
+
+## 경계 강: 강은 칸 중심이 아니라 칸 사이의 변을 따라 흐른다.
+## 꼭짓점(세 칸이 만나는 점)을 노드, 칸의 변을 간선으로 보고 바다에서부터 Priority-Flood 로
+## 하류 방향을 정한 뒤, 유출량을 모아 강을 만든다.
+func _make_edge_rivers() -> void:
+	var F: int = hs.face_centers.size()
+	var ce := PackedFloat32Array()
+	ce.resize(F)
+	var sink := PackedByteArray()
+	sink.resize(F)
+	var rn := _noise(16.0, 3, 61)
+	var c_run := PackedFloat32Array()
+	c_run.resize(F)
+	for f in F:
+		var e: float = 0.0
+		var water := false
+		for t in 3:
+			var ti: int = hs.face_tiles[f * 3 + t]
+			if elevation[ti] < 0.0 or is_lake[ti] == 1:
+				water = true
+			e += filled[ti]
+			c_run[f] += runoff[ti] / float(hs.degree(ti))
+		ce[f] = e / 3.0 + (rn.get_noise_3dv(hs.face_centers[f]) + 1.0) * 0.006
+		sink[f] = 1 if water else 0
+	c_down.resize(F)
+	c_down.fill(-1)
+	c_flow.resize(F)
+	c_flow.fill(0.0)
+	c_river.resize(F)
+	c_river.fill(0)
+	var heap := _Heap.new()
+	var visited := PackedByteArray()
+	visited.resize(F)
+	for f in F:
+		if sink[f] == 1:
+			visited[f] = 1
+			heap.push(ce[f], f)
+	var order := PackedInt32Array()
+	while heap.size() > 0:
+		var f: int = heap.pop()
+		for e in 3:
+			var g: int = hs.face_nb[f * 3 + e]
+			if visited[g] == 1:
+				continue
+			visited[g] = 1
+			ce[g] = maxf(ce[g], ce[f] + 1e-5)
+			c_down[g] = f
+			heap.push(ce[g], g)
+			order.append(g)
+	for f in order:
+		c_flow[f] = c_run[f]
+	for idx in range(order.size() - 1, -1, -1):
+		var f: int = order[idx]
+		var d: int = c_down[f]
+		if d >= 0 and sink[d] == 0:
+			c_flow[d] += c_flow[f]
+	# 임계값: 육지 꼭짓점 유량의 상위 분위수
+	var fl := PackedFloat32Array()
+	for f in order:
+		fl.append(c_flow[f])
+	fl.sort()
+	var q: float = clampf(1.0 - 0.06 * river_amount, 0.5, 0.995)
+	var thr: float = maxf(fl[int(q * (fl.size() - 1))] if fl.size() > 0 else 1e9, 400.0)
+	for f in order:
+		if c_flow[f] >= thr:
+			c_river[f] = 1
+	# 수계 정리: 하구(바다/호수 꼭짓점)까지 이어지고 본류가 충분히 긴 것만 남긴다
+	var chain := PackedInt32Array()
+	chain.resize(F)
+	for idx in range(order.size() - 1, -1, -1):
+		var f: int = order[idx]
+		if c_river[f] == 0:
+			continue
+		chain[f] = maxi(chain[f], 1)
+		var d: int = c_down[f]
+		if d >= 0 and c_river[d] == 1:
+			chain[d] = maxi(chain[d], chain[f] + 1)
+	var mouth := PackedInt32Array()
+	mouth.resize(F)
+	mouth.fill(-1)
+	for f in order:
+		if c_river[f] == 0:
+			continue
+		var d: int = c_down[f]
+		if d >= 0 and c_river[d] == 1:
+			mouth[f] = mouth[d]
+		elif d >= 0 and sink[d] == 1:
+			mouth[f] = f
+	var min_len: int = maxi(4, int(round(8.0 * pow(2.0, hs.level - 6))))
+	for f in order:
+		if c_river[f] == 1 and (mouth[f] < 0 or chain[mouth[f]] < min_len):
+			c_river[f] = 0
+	var spur: int = maxi(1, min_len / 3)
+	for f in order:
+		if c_river[f] == 1 and chain[f] <= spur:
+			var d: int = c_down[f]
+			if d >= 0 and c_river[d] == 1 and chain[d] > chain[f] + 1:
+				c_river[f] = 0
+	for f in order:
+		if c_river[f] == 1:
+			var d: int = c_down[f]
+			if d < 0 or (c_river[d] == 0 and sink[d] == 0):
+				c_river[f] = 0
+	# 칸별 강 변 기록
+	river_mask.resize(n)
+	river_mask.fill(0)
+	is_river.fill(0)
+	for f in F:
+		if c_river[f] == 0:
+			continue
+		var d: int = c_down[f]
+		# f-d 간선을 공유하는 두 칸 = 두 면이 공유하는 두 꼭짓점
+		for t in 3:
+			var ti: int = hs.face_tiles[f * 3 + t]
+			var off: int = hs.nb_offsets[ti]
+			var deg: int = hs.degree(ti)
+			for k in deg:
+				var fa: int = hs.corner_face[off + k]
+				var fb: int = hs.corner_face[off + (k + 1) % deg]
+				if (fa == f and fb == d) or (fa == d and fb == f):
+					river_mask[ti] |= 1 << k
+					is_river[ti] = 1
+	c_threshold = thr
 
 
 # ---------------------------------------------------------------- 생물군계
