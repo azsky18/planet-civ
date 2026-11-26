@@ -5,7 +5,7 @@ const LEVELS := [5, 6, 7]
 const LEVEL_LABELS := ["작게 (10,242칸)", "보통 (40,962칸)", "크게 (163,842칸, 느림)"]
 const MODE_LABELS := ["지형", "고도", "기온", "강수량", "판 구조", "기압과 바람", "식생"]
 ## 화면에 표시되는 빌드 이름. PC에서 어떤 버전이 실행 중인지 확인하는 용도.
-const BUILD := "v7.0 타일 위 그림 (식생, 시설물, 도로)"
+const BUILD := "v7.1 시점 돌리기 (Q/E, 휠 버튼 드래그)"
 const COMPASS := ["북", "북동", "동", "남동", "남", "남서", "서", "북서"]
 
 var hs := HexSphere.new()
@@ -19,6 +19,9 @@ var yaw: float = 0.4
 var pitch: float = -0.35
 var dist: float = 3.2
 var dist_target: float = 3.2
+## 바라보는 지점을 중심으로 카메라가 도는 방위각 (0 = 북쪽이 위)
+var heading: float = 0.0
+var _orbiting: bool = false
 var dragging := false
 var hover: int = -1
 var selected: int = -1
@@ -68,6 +71,8 @@ func _ready() -> void:
 		elif a.begins_with("--dist="):
 			dist = float(a.substr(7))
 			dist_target = dist
+		elif a.begins_with("--heading="):
+			heading = deg_to_rad(float(a.substr(10)))
 		elif a.begins_with("--seed="):
 			seed_edit.text = a.substr(7)
 			_regenerate()
@@ -330,7 +335,7 @@ func _setup_ui() -> void:
 
 	# 아래: 조작법
 	var help := Label.new()
-	help.text = "드래그: 회전   휠: 확대/축소 (가까이 가면 비스듬한 시점)   클릭: 타일 고정   방향키: 회전   R: 북쪽 정렬\n고정한 타일에 시험: 1 벌목  2 배수  3 경작지  4 도로  5 정착지 구역  T 10턴 진행"
+	help.text = "드래그: 회전   휠: 확대/축소 (가까이 가면 비스듬한 시점)   클릭: 타일 고정   방향키: 이동   Q/E 또는 휠 버튼 드래그: 시점 돌리기   R: 북쪽 정렬\n고정한 타일에 시험: 1 벌목  2 배수  3 경작지  4 도로  5 정착지 구역  T 10턴 진행"
 	help.add_theme_font_size_override("font_size", 12)
 	help.add_theme_color_override("font_color", Color("9f906c"))
 	help.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
@@ -495,7 +500,10 @@ func _update_camera() -> void:
 	var h: float = dist - 1.0
 	var tilt: float = deg_to_rad(58.0) * (1.0 - smoothstep(0.06, 0.8, h))
 	var out: Vector3 = pivot.basis.z.normalized()
-	var upv: Vector3 = pivot.basis.y.normalized()
+	var north: Vector3 = pivot.basis.y.normalized()
+	var east: Vector3 = pivot.basis.x.normalized()
+	# 방위각만큼 돌린 '화면 위쪽' 방향. 카메라는 그 반대편에서 바라본다.
+	var upv: Vector3 = (north * cos(heading) + east * sin(heading)).normalized()
 	var target: Vector3 = out
 	var cam_pos: Vector3 = target + out * (h * cos(tilt)) - upv * (h * sin(tilt))
 	var up: Vector3 = (upv * cos(tilt) + out * sin(tilt)).normalized()
@@ -508,11 +516,25 @@ func _process(delta: float) -> void:
 		Input.get_axis("ui_left", "ui_right"),
 		Input.get_axis("ui_up", "ui_down"))
 	if rot != Vector2.ZERO:
-		yaw += rot.x * delta * 1.2 * (dist - 1.0) / 2.0
-		pitch = clampf(pitch - rot.y * delta * 1.2 * (dist - 1.0) / 2.0, -1.5, 1.5)
-	if absf(dist - dist_target) > 1e-4 or rot != Vector2.ZERO:
+		_pan(Vector2(-rot.x, rot.y) * delta * 1.2 * (dist - 1.0) / 2.0)
+	var spin: float = 0.0
+	if Input.is_physical_key_pressed(KEY_Q):
+		spin -= 1.0
+	if Input.is_physical_key_pressed(KEY_E):
+		spin += 1.0
+	if spin != 0.0:
+		heading = wrapf(heading + spin * delta * 1.6, -PI, PI)
+	if absf(dist - dist_target) > 1e-4 or rot != Vector2.ZERO or spin != 0.0:
 		dist = lerpf(dist, dist_target, minf(1.0, delta * 10.0))
 		_update_camera()
+
+
+## 화면 기준 이동량을 (방위각을 반영해) 경도/위도 회전으로 바꾼다.
+func _pan(d: Vector2) -> void:
+	var c: float = cos(heading)
+	var sn: float = sin(heading)
+	yaw += -d.x * c + d.y * sn
+	pitch = clampf(pitch - (d.x * sn + d.y * c), -1.5, 1.5)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -527,17 +549,21 @@ func _unhandled_input(event: InputEvent) -> void:
 				if mb.button_index == MOUSE_BUTTON_LEFT and _drag_moved < 4.0:
 					selected = -1 if selected == hover else hover
 					_update_info()
+		elif mb.button_index == MOUSE_BUTTON_MIDDLE:
+			_orbiting = mb.pressed
 		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_UP:
 			dist_target = clampf(dist_target - (dist_target - 1.0) * 0.15, 1.025, 8.0)
 		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			dist_target = clampf(dist_target + (dist_target - 1.0) * 0.15, 1.025, 8.0)
 	elif event is InputEventMouseMotion:
 		var mm := event as InputEventMouseMotion
-		if dragging:
+		if _orbiting:
+			heading = wrapf(heading + mm.relative.x * 0.006, -PI, PI)
+			_update_camera()
+		elif dragging:
 			_drag_moved += mm.relative.length()
 			var k: float = 0.005 * (dist - 1.0) / 2.0
-			yaw -= mm.relative.x * k
-			pitch = clampf(pitch - mm.relative.y * k, -1.5, 1.5)
+			_pan(mm.relative * k)
 			_update_camera()
 		else:
 			_pick(mm.position)
@@ -545,6 +571,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		var kc: int = (event as InputEventKey).keycode
 		if kc == KEY_R:
 			pitch = -0.35
+			heading = 0.0
 			_update_camera()
 		elif kc in [KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_T]:
 			_layer_action(kc)
