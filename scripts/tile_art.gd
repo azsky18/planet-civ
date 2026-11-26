@@ -1,84 +1,30 @@
 class_name TileArt
 extends RefCounted
-## 타일 위 그림. 세 가지로 나뉜다.
+## 타일 위 그림. 문명3 처럼 상황마다 다른 2D 그림을 골라 쓰는 틀이다.
 ##
-##   바닥 (GROUND): 1층 지형·기후로 정하는 바닥 무늬. 이음매 없이 반복되는 그림이며,
-##       식생을 모두 걷어 내도 남는다. 가까이 가면 지형 색 대신 이 무늬가 보인다.
-##   납작한 그림 (DECAL): 칸 위에 깔리는 그림. 밭, 광장, 웅덩이, 도로, 해안, 강둑 등.
-##   세운 그림 (SPRITE): 나무, 집, 천막처럼 바닥에 세워 그리는 그림. 카메라를 향해 서고
-##       발밑에 그림자가 깔린다.
+## 그림은 art/tiles/ 아래 폴더에 파일을 넣기만 하면 읽는다 (목록을 코드에 적지 않는다).
+## 파일 이름 규칙 (자세한 내용은 art/tiles/README.md):
 ##
-## 그림을 바꾸려면 아래 목록의 경로만 바꾸거나 같은 이름의 파일을 덮어쓰면 된다.
-## SVG 와 PNG 를 모두 쓸 수 있다. 목록에서 지운 항목은 그리지 않는다.
-## 그림 규칙은 art/tiles/README.md 에 있다.
+##   이름.svg, 이름.2.svg, 이름.3.svg ...   같은 그림의 변주. 칸마다 정해진 하나를 고른다.
+##   이칸__이웃.svg                         이 칸과 이웃 칸의 조합에 쓰는 그림 (경계, 물가)
+##   any                                    조합 그림이 없을 때 쓰는 자리 표시 (any__ocean 등)
+##
+## 폴더:
+##   ground/  바닥 무늬 (이음매 없이 반복). 1층 지형·기후로 고른다.
+##   decal/   칸 위에 깔리는 그림 (식생 바닥, 밭, 광장, 도로, 그림자, 강둑)
+##   sprite/  세워 그리는 그림 (나무, 집, 천막 ...)
+##   edge/    이웃 바닥이 이 칸으로 번져 드는 경계 그림 (grass__desert: 초원 칸의 사막 쪽 변)
+##   shore/   땅과 물이 닿는 띠 (sand__ocean: 모래 땅과 바다)
+##   water/   물 위 그림 (deep, shallow, lake, ice) 과 강물(river)
+## SVG 와 PNG 를 모두 쓸 수 있다. 같은 이름의 PNG 가 있으면 SVG 대신 쓴다.
 
-const GROUND := {
-	"grass": "res://art/tiles/ground/grass.svg",    # 습윤
-	"plains": "res://art/tiles/ground/plains.svg",  # 반건조
-	"desert": "res://art/tiles/ground/desert.svg",  # 건조
-	"tundra": "res://art/tiles/ground/tundra.svg",  # 한대
-	"snow": "res://art/tiles/ground/snow.svg",      # 빙설
-	"rock": "res://art/tiles/ground/rock.svg",      # 산지
-}
-
-const DECAL := {
-	# 2층 식생
-	"grass": "res://art/tiles/grass.svg",
-	"grass_dry": "res://art/tiles/grass_dry.svg",
-	"tundra": "res://art/tiles/tundra.svg",
-	"forest": "res://art/tiles/forest.svg",
-	"forest_boreal": "res://art/tiles/forest_boreal.svg",
-	"jungle": "res://art/tiles/jungle.svg",
-	"wetland": "res://art/tiles/wetland.svg",
-	"desert": "res://art/tiles/desert.svg",
-	# 3층 시설물 (바닥 부분)
-	"farm": "res://art/tiles/farm.svg",
-	"district": "res://art/tiles/district.svg",
-	"shrine": "res://art/tiles/shrine.svg",
-	"mine": "res://art/tiles/mine.svg",
-	"lumber": "res://art/tiles/lumber.svg",
-	"irrigation": "res://art/tiles/irrigation.svg",
-	"camp": "res://art/tiles/camp.svg",
-	"fishery": "res://art/tiles/fishery.svg",
-	"ruin": "res://art/tiles/ruin.svg",
-	# 도로
-	"road": "res://art/tiles/road.svg",              # 한 갈래 (가운데 -> +x 변)
-	"road_alone": "res://art/tiles/road_alone.svg",  # 이웃 도로가 없는 외딴 도로
-	# 물가
-	"shore": "res://art/tiles/shore.svg",            # 위 절반 물, 아래 절반 땅
-	"river_bank": "res://art/tiles/river_bank.svg",  # 강줄기 아래 깔리는 흙둑
-	# 세운 그림 발밑 그림자
-	"shadow": "res://art/tiles/sprites/shadow.svg",
-}
-
-const SPRITE := {
-	"tree_broad": "res://art/tiles/sprites/tree_broad.svg",
-	"tree_conifer": "res://art/tiles/sprites/tree_conifer.svg",
-	"tree_conifer_snow": "res://art/tiles/sprites/tree_conifer_snow.svg",
-	"tree_jungle": "res://art/tiles/sprites/tree_jungle.svg",
-	"palm": "res://art/tiles/sprites/palm.svg",
-	"reeds": "res://art/tiles/sprites/reeds.svg",
-	"bush": "res://art/tiles/sprites/bush.svg",
-	"rock": "res://art/tiles/sprites/rock.svg",
-	"house": "res://art/tiles/sprites/house.svg",
-	"tower": "res://art/tiles/sprites/tower.svg",
-	"temple": "res://art/tiles/sprites/temple.svg",
-	"tent": "res://art/tiles/sprites/tent.svg",
-	"fire": "res://art/tiles/sprites/fire.svg",
-	"mine": "res://art/tiles/sprites/mine.svg",
-	"hut": "res://art/tiles/sprites/hut.svg",
-	"logs": "res://art/tiles/sprites/logs.svg",
-	"haystack": "res://art/tiles/sprites/haystack.svg",
-	"boat": "res://art/tiles/sprites/boat.svg",
-	"ruin_wall": "res://art/tiles/sprites/ruin_wall.svg",
-	"ruin_column": "res://art/tiles/sprites/ruin_column.svg",
-}
+const ART_DIR := "res://art/tiles/"
 
 ## 시설 종류 -> 그림 이름 (TileLayers.Struct 순서)
 const STRUCT_ART := ["", "farm", "district", "shrine", "mine", "lumber", "irrigation", "camp", "fishery"]
 
 ## 시설마다 세울 그림: [그림, x, y, 크기]. 좌표는 칸 중심 0, 꼭짓점까지 1, y 는 북쪽.
-## 크기는 그림 정사각형의 너비 (같은 단위).
+## 크기는 그림 정사각형의 너비 (같은 단위). 그림 이름에 변주가 있으면 하나씩 골라 쓴다.
 const STRUCT_SPRITES := {
 	"farm": [["haystack", 0.38, -0.05, 0.22], ["haystack", 0.5, 0.06, 0.18]],
 	"district": [["house", -0.4, 0.38, 0.4], ["house", 0.36, 0.42, 0.4], ["tower", 0.0, 0.18, 0.62],
@@ -98,38 +44,73 @@ const STRUCT_SPRITES := {
 const IDLE_TINT := Color(0.72, 0.68, 0.62)
 
 var ground_tex: Texture2DArray
-var ground_keys: Array = []
-var decals := Atlas.new(256, 8)
+var _ground_layers := {}          # 바닥 이름 -> [층 번호...]
+## decal, edge, shore, water 폴더를 한 장에 모은다. 이름은 "폴더/이름" (예: "shore/sand__ocean")
+var decals := Atlas.new(256, 10)
 var sprites := Atlas.new(128, 8)
 
 
-## 등록된 그림을 모두 읽는다.
+## art/tiles/ 의 그림을 모두 읽는다.
 func load_all() -> void:
-	decals.build(DECAL)
-	sprites.build(SPRITE)
+	var flat := {}
+	for folder in ["decal", "edge", "shore", "water"]:
+		for e in scan(folder):
+			flat[folder + "/" + e[0]] = e[1]
+	decals.build(flat)
+	var spr := {}
+	for e in scan("sprite"):
+		spr[e[0]] = e[1]
+	sprites.build(spr)
 	var imgs: Array[Image] = []
-	for key in GROUND:
-		var img: Image = Atlas.load_image(GROUND[key], 256)
+	for e in scan("ground"):
+		var img: Image = Atlas.load_image(e[1], 256)
 		if img == null:
-			push_warning("바닥 그림을 읽지 못함: %s" % GROUND[key])
-			img = Image.create_empty(256, 256, false, Image.FORMAT_RGBA8)
-			img.fill(Color(0.5, 0.5, 0.5))
-		img.convert(Image.FORMAT_RGBA8)
+			continue
 		img.generate_mipmaps()
+		var key: String = Atlas.base_name(e[0])
+		if not _ground_layers.has(key):
+			_ground_layers[key] = []
+		_ground_layers[key].append(imgs.size())
 		imgs.append(img)
-		ground_keys.append(key)
+	if imgs.is_empty():
+		var blank := Image.create_empty(4, 4, true, Image.FORMAT_RGBA8)
+		blank.fill(Color(0.5, 0.5, 0.5))
+		imgs.append(blank)
 	ground_tex = Texture2DArray.new()
 	ground_tex.create_from_images(imgs)
 
 
-## 여러 그림을 한 장에 모은 아틀라스
+## 폴더 안의 그림 파일: [[파일 이름(확장자 뺀 것), 경로], ...] 이름순.
+## 내보낸 게임에서는 원본 대신 .import 파일만 보이므로 그 이름도 받아들인다.
+static func scan(folder: String) -> Array:
+	var dir_path: String = ART_DIR + folder + "/"
+	var found := {}
+	for f in DirAccess.get_files_at(dir_path):
+		var name: String = f.trim_suffix(".import").trim_suffix(".remap")
+		var ext: String = name.get_extension().to_lower()
+		if ext != "svg" and ext != "png":
+			continue
+		var stem: String = name.get_basename()
+		# 같은 이름이면 PNG 를 먼저 쓴다 (나중에 그린 진짜 그림)
+		if found.has(stem) and ext == "svg":
+			continue
+		found[stem] = dir_path + name
+	var keys: Array = found.keys()
+	keys.sort()
+	var out: Array = []
+	for k in keys:
+		out.append([k, found[k]])
+	return out
+
+
+## 여러 그림을 한 장에 모은 아틀라스. 변주(이름.2, 이름.3)는 같은 이름 아래 묶인다.
 class Atlas:
 	var cell: int
 	var cols: int
 	var pad: int
 	var texture: ImageTexture
-	var keys: Array = []
-	var _index := {}
+	var count: int = 0
+	var _variants := {}    # 이름 -> [칸 번호...]
 	var _rows: int = 1
 
 	func _init(cell_px: int, columns: int) -> void:
@@ -137,36 +118,58 @@ class Atlas:
 		cols = columns
 		pad = cell_px / 16
 
+	## list: 파일 이름(변주 번호 포함) -> 경로
 	func build(list: Dictionary) -> void:
 		var images: Array = []
-		for key in list:
-			var img: Image = load_image(list[key], cell)
+		for name in list:
+			var img: Image = load_image(list[name], cell)
 			if img == null:
-				push_warning("타일 그림을 읽지 못함: %s (%s)" % [key, list[key]])
+				push_warning("타일 그림을 읽지 못함: %s" % list[name])
 				continue
 			img.fix_alpha_edges()   # 투명한 가장자리가 검게 번지지 않도록
-			_index[key] = keys.size()
-			keys.append(key)
+			var key: String = base_name(name)
+			if not _variants.has(key):
+				_variants[key] = []
+			_variants[key].append(images.size())
 			images.append(img)
-		_rows = maxi(1, ceili(float(images.size()) / cols))
+		count = images.size()
+		_rows = maxi(1, ceili(float(count) / cols))
 		var step: int = cell + pad * 2
 		var big := Image.create_empty(step * cols, step * _rows, false, Image.FORMAT_RGBA8)
 		big.fill(Color(0, 0, 0, 0))
-		for k in images.size():
+		for k in count:
 			big.blit_rect(images[k], Rect2i(0, 0, cell, cell), Vector2i((k % cols) * step + pad, (k / cols) * step + pad))
 		big.generate_mipmaps()
 		texture = ImageTexture.create_from_image(big)
 
 	func has(key: String) -> bool:
-		return _index.has(key)
+		return _variants.has(key)
 
-	## 그림 key 위의 점 (x, y) (가운데 0, 가장자리 ±1, y 는 위쪽) 의 아틀라스 좌표
-	func uv(key: String, x: float, y: float) -> Vector2:
-		var k: int = _index[key]
+	## 후보 이름 중 그림이 있는 첫 번째. 없으면 "".
+	func resolve(candidates: Array) -> String:
+		for c in candidates:
+			if _variants.has(c):
+				return c
+		return ""
+
+	func variant_count(key: String) -> int:
+		return _variants[key].size() if _variants.has(key) else 0
+
+	## 그림 key 의 변주 중 seed 로 하나를 골라, 그 위의 점 (x, y) (가운데 0, 가장자리 ±1, y 는 위쪽) 의 아틀라스 좌표
+	func uv(key: String, x: float, y: float, seed: int = 0) -> Vector2:
+		var v: Array = _variants[key]
+		var k: int = v[posmod(seed, v.size())]
 		var step: float = cell + pad * 2
 		var px: float = (k % cols) * step + pad + (0.5 + x * 0.5) * cell
 		var py: float = (k / cols) * step + pad + (0.5 - y * 0.5) * cell
 		return Vector2(px / (step * cols), py / (step * _rows))
+
+	## "forest.2" -> "forest"
+	static func base_name(name: String) -> String:
+		var dot: int = name.rfind(".")
+		if dot > 0 and name.substr(dot + 1).is_valid_int():
+			return name.substr(0, dot)
+		return name
 
 	static func load_image(path: String, size: int) -> Image:
 		var img: Image = _read(path, size)
@@ -204,29 +207,95 @@ class Atlas:
 
 # ---------------------------------------------------------------- 칸마다 고르는 규칙
 
-## 바닥 그림 번호 (ground_keys 의 순서). 물이면 -1.
-func ground_index(gen: WorldGen, i: int) -> int:
-	if gen.base[i] != TileLayers.Base.LAND:
-		return -1
-	var key: String
+## 칸마다 고정된 난수 (변주 고르기용). salt 로 같은 칸에서도 다른 값을 낸다.
+static func tile_seed(gen: WorldGen, i: int, salt: int = 0) -> int:
+	return hash(Vector3i(i, gen.seed_value, salt)) & 0x7fffffff
+
+
+## 칸의 겉모습 종류. 땅은 바닥 이름(grass, plains, desert, tundra, snow, rock),
+## 물은 deep, shallow, lake, ice. 경계 그림(edge/이칸__이웃)을 고를 때 쓴다.
+static func surface_class(gen: WorldGen, i: int) -> String:
+	match gen.base[i]:
+		TileLayers.Base.LAKE:
+			return "ice" if gen.veg[i] == TileLayers.Veg.ICE else "lake"
+		TileLayers.Base.SHALLOW:
+			return "ice" if gen.veg[i] == TileLayers.Veg.ICE else "shallow"
+		TileLayers.Base.DEEP:
+			return "ice" if gen.veg[i] == TileLayers.Veg.ICE else "deep"
 	if gen.veg[i] == TileLayers.Veg.ICE:
-		key = "snow"
-	elif gen.relief[i] == 2:
-		key = "snow" if gen.temperature[i] < -4.0 else "rock"
-	elif gen.temp_band[i] == TileLayers.TempBand.POLAR:
-		key = "tundra"
-	else:
-		match gen.moist[i]:
-			TileLayers.Moist.HUMID:
-				key = "grass"
-			TileLayers.Moist.SEMI:
-				key = "plains"
-			_:
-				key = "desert"
-	return ground_keys.find(key)
+		return "snow"
+	if gen.relief[i] == 2:
+		return "snow" if gen.temperature[i] < -4.0 else "rock"
+	if gen.temp_band[i] == TileLayers.TempBand.POLAR:
+		return "tundra"
+	match gen.moist[i]:
+		TileLayers.Moist.HUMID:
+			return "grass"
+		TileLayers.Moist.SEMI:
+			return "plains"
+	return "desert"
 
 
-## 2층 식생의 납작한 그림. 없으면 "".
+static func is_land(gen: WorldGen, i: int) -> bool:
+	return gen.base[i] == TileLayers.Base.LAND
+
+
+## 바닥 무늬 층 번호. 물이면 -1. 같은 바닥에 변주가 여럿이면 칸마다 하나를 고른다.
+func ground_index(gen: WorldGen, i: int) -> int:
+	if not is_land(gen, i):
+		return -1
+	var layers: Array = _ground_layers.get(surface_class(gen, i), [])
+	if layers.is_empty():
+		return -1
+	return layers[tile_seed(gen, i) % layers.size()]
+
+
+## 이 칸의 땅이 물과 닿는 모양: sand, grass, mud, rock, ice, gravel
+static func shore_class(gen: WorldGen, i: int) -> String:
+	if gen.veg[i] == TileLayers.Veg.WETLAND:
+		return "mud"
+	match surface_class(gen, i):
+		"snow":
+			return "ice"
+		"rock":
+			return "rock"
+		"tundra":
+			return "gravel"
+		"desert", "plains":
+			return "sand"
+	# 열대 바다는 모래 해변, 나머지 습윤한 땅은 풀밭 물가
+	if gen.temp_band[i] == TileLayers.TempBand.TROPICAL and gen.base[i] == TileLayers.Base.LAND:
+		return "sand"
+	return "grass"
+
+
+## 땅 칸 i 와 물 칸 j 사이 물가 그림 이름 ("shore/..."). 없으면 "".
+func shore_key(gen: WorldGen, i: int, j: int) -> String:
+	var land: String = shore_class(gen, i)
+	var water: String = "lake" if gen.base[j] == TileLayers.Base.LAKE else "ocean"
+	return decals.resolve(["shore/%s__%s" % [land, water], "shore/%s__any" % land, "shore/any__%s" % water, "shore/any__any"])
+
+
+## 칸 i 의 이웃 j 쪽 변에 깔 경계 그림 이름 ("edge/..."). 같은 겉모습이거나 땅과 물 사이면 "".
+func edge_key(gen: WorldGen, i: int, j: int) -> String:
+	if is_land(gen, i) != is_land(gen, j):
+		return ""
+	var a: String = surface_class(gen, i)
+	var b: String = surface_class(gen, j)
+	if a == b:
+		return ""
+	return decals.resolve(["edge/%s__%s" % [a, b], "edge/%s__any" % a, "edge/any__%s" % b])
+
+
+## 물 칸 위에 얹을 그림 이름 ("water/..."). 없으면 "".
+func water_key(gen: WorldGen, i: int) -> String:
+	if is_land(gen, i):
+		return ""
+	var k: String = "water/" + surface_class(gen, i)
+	return k if decals.has(k) else ""
+
+
+## 2층 식생의 납작한 그림 이름 (decal/ 아래). 없으면 "".
 static func veg_key(gen: WorldGen, i: int) -> String:
 	if gen.base[i] != TileLayers.Base.LAND:
 		return ""
@@ -253,7 +322,7 @@ static func veg_key(gen: WorldGen, i: int) -> String:
 	return ""
 
 
-## 3층 시설의 납작한 그림. 없으면 "".
+## 3층 시설의 납작한 그림 이름 (decal/ 아래). 없으면 "".
 static func struct_key(gen: WorldGen, i: int) -> String:
 	var s: int = gen.structure[i]
 	if s == TileLayers.Struct.NONE:
@@ -263,7 +332,7 @@ static func struct_key(gen: WorldGen, i: int) -> String:
 	return STRUCT_ART[s]
 
 
-## 칸 i 에 세울 그림 목록: [그림, x, y, 크기, 색]
+## 칸 i 에 세울 그림 목록: [그림, x, y, 크기, 색, 변주 seed]
 static func sprites_for(gen: WorldGen, i: int) -> Array:
 	var out: Array = []
 	var sk: String = struct_key(gen, i)
@@ -272,12 +341,11 @@ static func sprites_for(gen: WorldGen, i: int) -> Array:
 	# 식생: 시설이 놓인 자리는 비워 둔다
 	var vk: String = "" if replaces else veg_key(gen, i)
 	var rng := RandomNumberGenerator.new()
-	rng.seed = hash(i * 7919 + gen.seed_value)
+	rng.seed = tile_seed(gen, i, 1)
 	var keep_out: float = 0.0 if sk == "" else 0.45
 	match vk:
 		"forest", "forest_boreal", "jungle":
-			var n: int = 11
-			for p in _scatter(rng, n, 0.78, keep_out):
+			for p in _scatter(rng, 11, 0.78, keep_out):
 				var kind: String
 				if vk == "jungle":
 					kind = "palm" if rng.randf() < 0.3 else "tree_jungle"
@@ -285,19 +353,19 @@ static func sprites_for(gen: WorldGen, i: int) -> Array:
 					kind = "tree_conifer_snow" if gen.temp_band[i] == TileLayers.TempBand.POLAR or rng.randf() < 0.4 else "tree_conifer"
 				else:
 					kind = "tree_conifer" if rng.randf() < 0.4 else "tree_broad"
-				out.append([kind, p.x, p.y, rng.randf_range(0.36, 0.46), Color.WHITE])
+				out.append([kind, p.x, p.y, rng.randf_range(0.36, 0.46), Color.WHITE, rng.randi()])
 		"wetland":
 			for p in _scatter(rng, 6, 0.75, keep_out):
-				out.append(["reeds", p.x, p.y, rng.randf_range(0.2, 0.26), Color.WHITE])
+				out.append(["reeds", p.x, p.y, rng.randf_range(0.2, 0.26), Color.WHITE, rng.randi()])
 		"grass_dry":
 			for p in _scatter(rng, 3, 0.7, keep_out):
-				out.append(["bush", p.x, p.y, rng.randf_range(0.14, 0.18), Color.WHITE])
+				out.append(["bush", p.x, p.y, rng.randf_range(0.14, 0.18), Color.WHITE, rng.randi()])
 		"tundra":
 			for p in _scatter(rng, 3, 0.7, keep_out):
-				out.append(["rock" if rng.randf() < 0.6 else "bush", p.x, p.y, rng.randf_range(0.14, 0.2), Color.WHITE])
+				out.append(["rock" if rng.randf() < 0.6 else "bush", p.x, p.y, rng.randf_range(0.14, 0.2), Color.WHITE, rng.randi()])
 	if STRUCT_SPRITES.has(sk):
 		for e in STRUCT_SPRITES[sk]:
-			out.append([e[0], e[1], e[2], e[3], tint])
+			out.append([e[0], e[1], e[2], e[3], tint, rng.randi()])
 	return out
 
 
