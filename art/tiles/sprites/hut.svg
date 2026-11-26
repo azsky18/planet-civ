@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+<!-- 벌목 오두막. 세워 그리는 그림: 바닥에 닿는 점이 (64,124) -->
+<g transform="translate(64,124) scale(2.4)"><path d="M-20,0 L-20,-18 L6,-25 L6,-7 Z" fill="#8a5a30" stroke="#3a2410" stroke-width="1"/><path d="M6,-7 L6,-25 L22,-18 L22,0 Z" fill="#6a4220" stroke="#3a2410" stroke-width="1"/><g stroke="#5a3418" stroke-width="1"><path d="M-20,-6 L6,-13 M-20,-12 L6,-19 M6,-13 L22,-6 M6,-19 L22,-12"/></g><path d="M-23,-17 L-4,-38 L9,-26 L6,-24 L-20,-17 Z" fill="#6a6a4a" stroke="#2a2a1a" stroke-width="1"/><path d="M-4,-38 L25,-19 L22,-17 L6,-24 L9,-26 Z" fill="#4a4a32" stroke="#2a2a1a" stroke-width="1"/><rect x="-12" y="-14" width="7" height="10" fill="#2a1a0c"/></g>
+</svg>

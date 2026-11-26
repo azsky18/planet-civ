@@ -87,6 +87,8 @@ func _ready() -> void:
 			_update_info()
 		elif a == "--demo":
 			_demo_town()
+		elif a.begins_with("--find="):
+			_find_and_look(a.substr(7))
 		elif a.begins_with("--key="):
 			_layer_action(OS.find_keycode_from_string(a.substr(6)))
 		elif a.begins_with("--mode="):
@@ -595,6 +597,32 @@ func _layer_action(kc: int) -> void:
 
 
 var _turns: int = 0
+
+
+## 스크린샷 점검용 (--find=river|lake|jungle|wetland|boreal|desert|mountain): 그런 칸을 찾아 카메라를 돌린다.
+func _find_and_look(what: String) -> void:
+	for k in gen.n:
+		var ok := false
+		match what:
+			"river":
+				ok = gen.is_river[k] == 1 and gen.relief[k] == 0 and gen.base[k] == TileLayers.Base.LAND
+			"lake":
+				ok = gen.is_lake[k] == 1
+			"jungle":
+				ok = TileLayers.is_jungle(gen, k)
+			"wetland":
+				ok = gen.veg[k] == TileLayers.Veg.WETLAND
+			"boreal":
+				ok = gen.veg[k] == TileLayers.Veg.FOREST and gen.temp_band[k] == TileLayers.TempBand.BOREAL
+			"desert":
+				ok = gen.base[k] == TileLayers.Base.LAND and gen.moist[k] == TileLayers.Moist.ARID and gen.relief[k] == 0
+			"mountain":
+				ok = gen.relief[k] == 2
+		if ok:
+			var d: Vector3 = hs.centers[k]
+			pitch = -asin(d.y)
+			yaw = atan2(d.x, d.z)
+			return
 
 
 ## 스크린샷 점검용 (--demo): 고정한 타일에 정착지 구역을 두고, 둘레에 도로와 경작지를 깐다.

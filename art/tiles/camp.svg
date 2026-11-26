@@ -1,9 +1,3 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 256 256" width="256" height="256">
-<!-- 유목 야영지: 둥근 천막과 모닥불 -->
-<defs><g id="y"><ellipse cx="4" cy="2" rx="24" ry="7" fill="#2a1e10" opacity="0.35"/><path d="M-20,0 L-20,-12 Q0,-22 20,-12 L20,0 Q0,6 -20,0 Z" fill="#e8dcc0" stroke="#6a5a3a" stroke-width="1.2"/><path d="M-20,-12 Q-4,-34 0,-34 Q4,-34 20,-12 Q0,-22 -20,-12 Z" fill="#d8c8a4" stroke="#6a5a3a" stroke-width="1.2"/><path d="M-20,-8 Q0,-17 20,-8" fill="none" stroke="#b04a2c" stroke-width="2.5"/><path d="M-5,1 L-5,-10 L5,-10 L5,1 Z" fill="#8a3a24"/><circle cx="0" cy="-33" r="3" fill="#8a6a3a"/></g></defs>
-<use xlink:href="#y" transform="translate(98,104)"/>
-<use xlink:href="#y" transform="translate(166,112)"/>
-<use xlink:href="#y" transform="translate(82,166)"/>
-<use xlink:href="#y" transform="translate(150,180)"/>
-<g transform="translate(128,142)"><ellipse cx="0" cy="2" rx="12" ry="4" fill="#4a3a2a"/><path d="M-8,0 L8,-4 M-8,-4 L8,0" stroke="#6a4220" stroke-width="3"/><path d="M0,-4 Q-7,-12 -2,-22 Q0,-14 4,-18 Q6,-10 0,-4 Z" fill="#f08a2a"/><path d="M0,-5 Q-3,-10 0,-15 Q2,-10 0,-5 Z" fill="#f8d84a"/></g>
-</svg>
+<!-- 유목 야영지 바닥: 밟힌 풀밭 (천막과 모닥불은 세워 그리는 그림) -->
+<ellipse cx="128" cy="134" rx="80" ry="62" fill="#b0a070" opacity="0.45"/><ellipse cx="128" cy="140" rx="14" ry="7" fill="#4a3a2a" opacity="0.7"/></svg>

@@ -1,12 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 256 256" width="256" height="256">
-<!-- 광산: 갱도 입구, 수레, 돌무더기 -->
-<path d="M50,170 L92,96 L120,120 L150,72 L206,170 Z" fill="#8a7a62" stroke="#4a3e2c" stroke-width="1.5" stroke-linejoin="round"/>
-<path d="M150,72 L206,170 L160,170 L140,120 Z" fill="#6a5c48"/><path d="M92,96 L120,120 L108,170 L50,170 Z" fill="#a0907a" opacity="0.6"/>
-<path d="M110,170 L110,140 Q128,122 146,140 L146,170 Z" fill="#1e1812" stroke="#5a3e22" stroke-width="2"/>
-<path d="M106,170 L106,136 L150,136 L150,170" fill="none" stroke="#7a5430" stroke-width="5"/><path d="M104,136 L152,136" stroke="#5a3a1e" stroke-width="6"/>
-<path d="M118,170 L104,212 M138,170 L152,212" stroke="#5a4428" stroke-width="2.5"/>
-<g stroke="#6a5030" stroke-width="2"><path d="M116,180 L140,180 M113,190 L143,190 M110,200 L146,200"/></g>
-<ellipse cx="80" cy="196" rx="22" ry="7" fill="#2a1e10" opacity="0.3"/>
-<g fill="#9a9a94" stroke="#4a4a44" stroke-width="1"><circle cx="68" cy="190" r="7"/><circle cx="82" cy="186" r="8"/><circle cx="92" cy="194" r="6"/><circle cx="76" cy="196" r="6"/></g>
-<g transform="translate(172,196)"><ellipse cx="2" cy="4" rx="18" ry="5" fill="#2a1e10" opacity="0.3"/><path d="M-14,-12 L14,-12 L10,2 L-10,2 Z" fill="#7a5430" stroke="#3a2410" stroke-width="1.2"/><circle cx="-7" cy="3" r="4" fill="#3a3a3a"/><circle cx="7" cy="3" r="4" fill="#3a3a3a"/><circle cx="-4" cy="-14" r="4" fill="#5a5a58"/><circle cx="4" cy="-15" r="4" fill="#6a6a66"/></g>
+<!-- 광산 바닥: 돌무더기와 수레길 (갱도는 세워 그리는 그림) -->
+<ellipse cx="128" cy="140" rx="84" ry="60" fill="#8a7a62" opacity="0.5"/>
+<g stroke="#5a4428" stroke-width="2.5"><path d="M120,150 L100,214 M136,150 L156,214"/></g><g stroke="#6a5030" stroke-width="2"><path d="M116,166 L140,166 M112,182 L144,182 M107,198 L149,198"/></g>
+<g fill="#9a9a94" stroke="#4a4a44" stroke-width="1"><circle cx="68" cy="170" r="7"/><circle cx="82" cy="166" r="8"/><circle cx="92" cy="176" r="6"/><circle cx="186" cy="160" r="6"/><circle cx="176" cy="170" r="5"/></g>
 </svg>

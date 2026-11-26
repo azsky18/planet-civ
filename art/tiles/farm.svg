@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 256 256" width="256" height="256">
-<!-- 경작지: 이랑이 있는 밭 다섯 뙈기와 산울타리, 짚더미 -->
+<!-- 경작지: 이랑이 있는 밭 다섯 뙈기와 산울타리 (짚더미는 세워 그리는 그림) -->
 <defs><clipPath id="a"><path d="M42,100 L116,72 L132,116 L58,146 Z"/></clipPath><clipPath id="b"><path d="M116,72 L194,44 L210,88 L132,116 Z"/></clipPath>
 <clipPath id="c"><path d="M58,146 L132,116 L148,162 L74,192 Z"/></clipPath><clipPath id="d"><path d="M132,116 L210,88 L226,134 L148,162 Z"/></clipPath>
 <clipPath id="e"><path d="M74,192 L148,162 L160,196 L88,224 Z"/></clipPath></defs>
@@ -14,6 +14,4 @@
 <g clip-path="url(#d)" stroke="#b89c48"><path d="M136,84 L152,168 M148,80 L164,164 M160,76 L176,160 M172,72 L188,156 M184,68 L200,152 M196,64 L212,148 M208,60 L224,144"/></g>
 <g clip-path="url(#e)" stroke="#617a2c"><path d="M80,160 L96,230 M92,156 L108,226 M104,152 L120,222 M116,148 L132,218 M128,144 L144,214 M140,140 L156,210"/></g></g>
 <g fill="#3f5a22" stroke="#25381a" stroke-width="1"><circle cx="116" cy="72" r="5"/><circle cx="132" cy="116" r="5"/><circle cx="148" cy="162" r="5"/><circle cx="194" cy="44" r="5"/><circle cx="42" cy="100" r="5"/><circle cx="210" cy="88" r="4"/><circle cx="58" cy="146" r="4"/></g>
-<ellipse cx="176" cy="126" rx="9" ry="3" fill="#3a2e10" opacity="0.35"/><path d="M166,124 Q171,108 176,108 Q181,108 186,124 Z" fill="#e6c860" stroke="#8a6a24" stroke-width="1.2"/>
-<ellipse cx="194" cy="116" rx="7" ry="2.5" fill="#3a2e10" opacity="0.35"/><path d="M187,114 Q191,102 194,102 Q198,102 201,114 Z" fill="#e6c860" stroke="#8a6a24" stroke-width="1.2"/>
 </svg>
