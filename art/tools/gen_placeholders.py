@@ -4,9 +4,8 @@
 그림만 만든다. 나중에 진짜 그림이 생기면 같은 이름의 파일을 덮어쓰면 된다.
 
   ground/<바닥>.svg, <바닥>.2.svg ...      이음매 없이 반복되는 바닥 무늬와 변주
-  edge/<이 칸>__<이웃 칸>.svg               이웃 바닥이 이 칸으로 번져 드는 경계 그림
-  shore/<땅 물가>__<물>.svg                 땅과 물이 닿는 띠 (위 절반 물, 아래 절반 땅)
-  water/<물>.svg ...                        물 위에 얹는 물결 그림, 강물
+  ground/<물>.svg, ground/shore_<물가>.svg  물 무늬와 물가 땅 무늬 (같이 반복)
+  decal/river.svg                           강물 띠
   decal/<이름>.N.svg, sprite/<이름>.N.svg   기본 그림의 변주
 """
 import math
@@ -116,136 +115,45 @@ for gi, name in enumerate(GROUND):
         out("ground", name if v == 1 else f"{name}.{v}", f"바닥: {NOTE[name]}, 변주 {v}", ground_svg(name, 100 * gi + v))
 
 
-# ---------------------------------------------------------------- 경계 (이웃 바닥이 이 칸으로 번져 듦)
-# 위쪽 가장자리(y=0)가 이웃과 맞닿은 변이고, 아래로 갈수록 이웃 무늬가 옅어진다.
+# ---------------------------------------------------------------- 물과 물가 무늬 (바닥처럼 이음매 없이 반복)
+# 꼭짓점 합성에서 물 칸은 물 무늬, 땅과 물이 만나는 곳의 땅 쪽은 물가 무늬로 칠한다.
 
-def edge_svg(nb, seed, water=False):
+WATERS = {
+    "deep": ("#1d4468", ["#173a5c", "#24507a", "#1a3f62"],
+             lambda r: ripples(r, 50, "#5f8cb0", op=0.45, w0=8, w1=18, sw=1.4) + ripples(r, 30, "#0e2840", op=0.4, w0=10, w1=20, sw=1.6)),
+    "shallow": ("#3f8c9a", ["#4a9aa6", "#388090", "#58a8ae"],
+                lambda r: ripples(r, 50, "#a8dcd8", op=0.4, w0=6, w1=14, sw=1.3) + blobs(r, 14, ["#6ab8b4"], 10, 24, 0.3)),
+    "lake": ("#3f7f9a", ["#46889e", "#38728c"], lambda r: ripples(r, 30, "#b4dce6", op=0.35, w0=6, w1=12, sw=1.2)),
+    "ice": ("#e6eef2", ["#f4f8fa", "#d4e2ea", "#c8d8e4"],
+            lambda r: cracks(r, 40, "#9ab4c6") + blobs(r, 10, ["#b8d0e0"], 10, 24, 0.4)),
+}
+WATER_NOTE = {"deep": "깊은 바다", "shallow": "얕은 바다", "lake": "호수", "ice": "해빙"}
+SHORES = {
+    "sand": ("#e2cf96", ["#ecdcaa", "#d6c088", "#f0e2b8"], lambda r: specks(r, 80, ["#b89c62", "#fff4d8"], 1.4)),
+    "grass": ("#a8b070", ["#b8b680", "#98a462", "#c4bc8c"], lambda r: specks(r, 120, ["#8a8474", "#d8d0b8"], 2.0) + blades(r, 80, ["#6f9a3a", "#8ab443"], 6)),
+    "mud": ("#6e6248", ["#5a5038", "#7a6c4c", "#4e5a48", "#86785a"], lambda r: ripples(r, 20, "#9aa89c", op=0.4) + blades(r, 60, ["#6a7a3a", "#5a6a2a"], 9)),
+    "rock": ("#6e675c", ["#5e584e", "#847c70", "#4e4840"], lambda r: specks(r, 160, ["#3e382f", "#a49c8e"], 3.0) + cracks(r, 40, "#2e2a24")),
+    "ice": ("#f2f6f8", ["#e4eef4", "#ffffff", "#d0dee8"], lambda r: cracks(r, 30, "#a8c0d0")),
+    "gravel": ("#9a968c", ["#8a8478", "#aaa69c"], lambda r: specks(r, 400, ["#7a766c", "#a8a498", "#c4c0b4", "#6a665e"], 3.0)),
+}
+SHORE_NOTE = {"sand": "모래 해변", "grass": "풀밭 물가 (자갈 섞인)", "mud": "갯벌·진흙", "rock": "바위 해안", "ice": "얼음 해안", "gravel": "자갈 해안"}
+
+
+def tex_svg(spec, seed):
+    base, cols, extra = spec
     r = random.Random(seed)
-    if water:
-        col = {"deep": "#14324e", "shallow": "#6fb6b8"}[nb]
-        body = f'<defs><linearGradient id="f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{col}" stop-opacity="0.75"/><stop offset="1" stop-color="{col}" stop-opacity="0"/></linearGradient></defs>\n'
-        body += f'<rect width="{S}" height="150" fill="url(#f)"/>'
-        return body
-    base, cols, _ = GROUND[nb]
-    # 물결 모양 아래 끝
-    pts = []
-    for k in range(0, 9):
-        pts.append((k * 32, r.uniform(70, 120)))
-    path = f"M0,0 L{S},0 L{S},{pts[-1][1]:.0f} " + " ".join(f"Q{x + 16:.0f},{y + r.uniform(-25, 25):.0f} {x:.0f},{y:.0f}" for x, y in reversed(pts[:-1])) + " Z"
-    body = f'<defs><linearGradient id="f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{base}" stop-opacity="0.95"/><stop offset="0.35" stop-color="{base}" stop-opacity="0.6"/><stop offset="0.55" stop-color="{base}" stop-opacity="0"/></linearGradient></defs>\n'
-    body += f'<path d="{path}" fill="url(#f)"/>\n'
-    body += blobs(r, 18, cols, 8, 22, 0.45, tile=False, box=(0, 0, S, 70))
-    body += blobs(r, 14, cols, 5, 14, 0.3, tile=False, box=(0, 60, S, 130))
-    return body
+    return f'<rect width="{S}" height="{S}" fill="{base}"/>\n' + blobs(r, 40, cols, 12, 36, 0.5) + extra(r)
 
 
-LAND = list(GROUND)
-for a in LAND:
-    for b in LAND:
-        if a != b:
-            out("edge", f"{a}__{b}", f"경계: {NOTE[a]} 칸에 {NOTE[b]} 바닥이 번져 듦", edge_svg(b, zlib.crc32((a + b).encode()) & 0xffff))
-out("edge", "shallow__deep", "경계: 얕은 바다 칸에 깊은 바다가 번져 듦", edge_svg("deep", 1, water=True))
-out("edge", "deep__shallow", "경계: 깊은 바다 칸에 얕은 바다가 번져 듦", edge_svg("shallow", 2, water=True))
+for k, name in enumerate(WATERS):
+    for v in (1, 2):
+        out("ground", name if v == 1 else f"{name}.{v}", f"물: {WATER_NOTE[name]}, 변주 {v}", tex_svg(WATERS[name], 500 + 10 * k + v))
+for k, name in enumerate(SHORES):
+    for v in (1, 2):
+        out("ground", f"shore_{name}" + ("" if v == 1 else f".{v}"), f"물가 땅: {SHORE_NOTE[name]}, 변주 {v}", tex_svg(SHORES[name], 600 + 10 * k + v))
 
 
-# ---------------------------------------------------------------- 물가 (땅 종류 x 물 종류)
-# 위 절반(y<128)이 물, 아래 절반이 땅, y=128 이 물가선. 가로로 늘여 쓴다.
-
-def shore_svg(land, water, seed):
-    r = random.Random(seed)
-    calm = water == "lake"
-    sh = "#7cc4c4" if not calm else "#7ab8c8"
-    body = (f'<defs><linearGradient id="w" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{sh}" stop-opacity="0"/>'
-            f'<stop offset="0.3" stop-color="{sh}" stop-opacity="0.35"/><stop offset="0.5" stop-color="{sh}" stop-opacity="0.7"/></linearGradient>\n')
-    spec = {
-        "sand": ("#e6d39a", 0.62, "모래"),
-        "grass": ("#7da24a", 0.85, "풀밭"),
-        "mud": ("#6e6248", 0.85, "갯벌"),
-        "rock": ("#6e675c", 0.95, "바위 절벽"),
-        "ice": ("#f2f6f8", 0.95, "얼음"),
-        "gravel": ("#9a968c", 0.8, "자갈"),
-    }[land]
-    col, op, _ = spec
-    body += (f'<linearGradient id="l" x1="0" y1="0" x2="0" y2="1"><stop offset="0.5" stop-color="{col}" stop-opacity="{op}"/>'
-             f'<stop offset="0.75" stop-color="{col}" stop-opacity="{op * 0.5:.2f}"/><stop offset="1" stop-color="{col}" stop-opacity="0"/></linearGradient></defs>\n')
-    body += f'<rect width="{S}" height="128" fill="url(#w)"/>\n<rect y="128" width="{S}" height="128" fill="url(#l)"/>\n'
-    # 땅 쪽 무늬
-    if land == "sand":
-        body += f'<rect y="124" width="{S}" height="26" fill="#ecdcaa"/>'
-        body += specks(r, 18, ["#b89c62", "#d8c48a"], 1.6, tile=False, box=(0, 132, S, 170), op=0.7)
-    elif land == "grass":
-        body += f'<rect y="124" width="{S}" height="9" fill="#c8b98a" opacity="0.9"/>'
-        body += specks(r, 26, ["#9a9484", "#c0b8a4"], 2.2, tile=False, box=(0, 126, S, 134))
-        body += blades(r, 70, ["#5b8530", "#6f9a3a", "#8ab443"], 8, tile=False, box=(0, 140, S, 200), op=0.9)
-    elif land == "mud":
-        body += blobs(r, 22, ["#5a5038", "#7a6c4c", "#4e5a48"], 8, 20, 0.6, tile=False, box=(0, 120, S, 170))
-        body += blades(r, 40, ["#6a7a3a", "#5a6a2a"], 14, tile=False, box=(0, 130, S, 180))
-        body += ripples(r, 6, "#a8c0b8", tile=False, box=(10, 100, S - 10, 124), op=0.5)
-    elif land == "rock":
-        for k in range(10):
-            x = k * 28 + r.uniform(-6, 6)
-            h = r.uniform(18, 34)
-            body += f'<path d="M{x - 18:.0f},{128 + h * 0.4:.0f} L{x - 10:.0f},{128 - h * 0.25:.0f} L{x + 4:.0f},{128 - h * 0.35:.0f} L{x + 18:.0f},{128 + h * 0.3:.0f} Z" fill="{r.choice(["#7a7266", "#8a8276", "#665e54"])}" stroke="#3e382f" stroke-width="1"/>'
-        body += specks(r, 20, ["#5a5248", "#a09888"], 2.4, tile=False, box=(0, 140, S, 175))
-    elif land == "ice":
-        body += f'<path d="M0,124 ' + " ".join(f"L{k * 16:.0f},{124 + r.uniform(-6, 4):.0f}" for k in range(17)) + f' L{S},160 L0,160 Z" fill="#f8fbfc" stroke="#b8cad6" stroke-width="1.2"/>'
-        body += "".join(f'<path d="M{r.uniform(0, S):.0f},{r.uniform(132, 156):.0f} l{r.uniform(-14, 14):.0f},{r.uniform(4, 10):.0f}" stroke="#b8cad6" stroke-width="1"/>' for _ in range(8))
-        body += blobs(r, 6, ["#f2f6f8", "#e4eef4"], 5, 12, 0.9, tile=False, box=(0, 96, S, 118))
-    elif land == "gravel":
-        body += specks(r, 140, ["#7a766c", "#a8a498", "#8a8478", "#c4c0b4"], 3.2, tile=False, box=(0, 124, S, 156))
-    # 물 쪽: 물거품 또는 잔물결
-    if calm:
-        body += ripples(r, 8, "#e8f4f2", tile=False, box=(10, 96, S - 10, 122), op=0.5, w0=10, w1=18, sw=1.6)
-    elif land != "ice":
-        foam = "#f6f4ea"
-        body += f'<path d="M0,124 Q16,{116 + r.uniform(-3, 3):.0f} 32,124 T64,124 T96,124 T128,124 T160,124 T192,124 T224,124 T256,124 L256,{130 if land != "rock" else 128} L0,{130 if land != "rock" else 128} Z" fill="{foam}" opacity="{0.9 if land != "mud" else 0.4}"/>'
-        body += f'<path d="M0,104 Q21,98 42,104 T85,104 T128,104 T171,104 T213,104 T256,104" fill="none" stroke="#e8f4f2" stroke-width="3" opacity="0.5"/>'
-        if land == "rock":
-            body += blobs(r, 10, ["#ffffff"], 3, 8, 0.8, tile=False, box=(0, 112, S, 126))
-    return body
-
-
-SHORE_NOTE = {"sand": "모래 해변", "grass": "풀밭 물가", "mud": "갯벌·진흙", "rock": "바위 절벽", "ice": "얼음 가장자리", "gravel": "자갈 물가"}
-for land in SHORE_NOTE:
-    for water in ("ocean", "lake"):
-        n = 2 if land in ("sand", "grass", "rock") and water == "ocean" else 1
-        for v in range(1, n + 1):
-            out("shore", f"{land}__{water}" + ("" if v == 1 else f".{v}"),
-                f"물가: {SHORE_NOTE[land]} / {'바다' if water == 'ocean' else '호수'}, 변주 {v}. 위 절반 물, 아래 절반 땅",
-                shore_svg(land, water, zlib.crc32((land + water).encode()) % 1000 + v))
-out("shore", "any__any", "물가: 맞는 그림이 없을 때 쓰는 기본값", shore_svg("sand", "ocean", 5))
-
-
-# ---------------------------------------------------------------- 물 위에 얹는 그림 (칸마다, 가운데 기준 원 안쪽)
-
-def water_svg(kind, seed):
-    r = random.Random(seed)
-    box = (40, 40, 216, 216)
-    if kind == "deep":
-        return (ripples(r, 7, "#9cc0d8", tile=False, box=box, op=0.22, w0=10, w1=20, sw=1.4)
-                + ripples(r, 5, "#0a1e30", tile=False, box=box, op=0.2, w0=12, w1=22, sw=1.8))
-    if kind == "shallow":
-        return (blobs(r, 5, ["#9ad8d0", "#c8e8d8"], 14, 30, 0.12, tile=False, box=box)
-                + ripples(r, 7, "#e8f8f4", tile=False, box=box, op=0.3, w0=8, w1=16, sw=1.3))
-    if kind == "lake":
-        return "".join(f'<ellipse cx="{x:.0f}" cy="{y:.0f}" rx="{w:.0f}" ry="{w * 0.35:.0f}" fill="none" stroke="#e0f0f4" stroke-width="1.3" opacity="0.45"/>'
-                       for x, y, w in [(r.uniform(60, 196), r.uniform(60, 196), r.uniform(6, 16)) for _ in range(7)])
-    if kind == "ice":
-        s = ""
-        for _ in range(7):
-            x, y, w = r.uniform(56, 200), r.uniform(56, 200), r.uniform(14, 30)
-            pts = " ".join(f"{x + w * math.cos(a) * r.uniform(0.7, 1.0):.0f},{y + w * 0.7 * math.sin(a) * r.uniform(0.7, 1.0):.0f}" for a in [k * math.pi / 3 for k in range(6)])
-            s += f'<polygon points="{pts}" fill="#f4f8fa" stroke="#b8cad6" stroke-width="1.2" opacity="0.95"/>'
-        return s
-    return ""
-
-
-WATER_NOTE = {"deep": "깊은 바다 물결", "shallow": "얕은 바다 물빛", "lake": "호수 잔물결", "ice": "해빙 조각"}
-for kind in WATER_NOTE:
-    for v in (1, 2, 3):
-        out("water", kind if v == 1 else f"{kind}.{v}", f"물: {WATER_NOTE[kind]}, 변주 {v}", water_svg(kind, 300 + 10 * v + len(kind)))
-
-out("water", "river", "강물: 가로로 늘여 쓰는 띠. 가운데가 물, 위아래 끝은 투명",
+out("decal", "river", "강물: 가로로 늘여 쓰는 띠. 가운데가 물, 위아래 끝은 투명",
     '<defs><linearGradient id="r" x1="0" y1="0" x2="0" y2="1"><stop offset="0.12" stop-color="#2a64a8" stop-opacity="0"/>'
     '<stop offset="0.22" stop-color="#2f6cae" stop-opacity="1"/><stop offset="0.5" stop-color="#3a7cbc" stop-opacity="1"/>'
     '<stop offset="0.78" stop-color="#2f6cae" stop-opacity="1"/><stop offset="0.88" stop-color="#2a64a8" stop-opacity="0"/></linearGradient></defs>\n'

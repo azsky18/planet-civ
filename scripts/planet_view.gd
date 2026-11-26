@@ -37,48 +37,110 @@ var terrain_mesh := ArrayMesh.new()
 ## 타일 위 그림 (식생, 도로, 시설물). 그림 목록과 고르는 규칙은 TileArt 에 있다.
 static var tile_art: TileArt
 var art_enabled := true
-var art_edge_mi := MeshInstance3D.new()
-var art_shore_mi := MeshInstance3D.new()
-var art_water_mi := MeshInstance3D.new()
+## 꼭짓점 조합 바닥 (땅, 물, 물가를 한 장으로). 가까이서만 보인다.
+var surface_mi := MeshInstance3D.new()
+var _surface_mat := ShaderMaterial.new()
+var _surface_sig := PackedInt32Array()   # 마지막으로 만든 바닥의 칸별 무늬 (바뀐 게 없으면 다시 만들지 않는다)
 var art_veg_mi := MeshInstance3D.new()
 var art_road_mi := MeshInstance3D.new()
 var art_struct_mi := MeshInstance3D.new()
 var art_shadow_mi := MeshInstance3D.new()
 var art_sprite_mi := MeshInstance3D.new()
 var river_bank_mi := MeshInstance3D.new()
-var _terrain_mat := ShaderMaterial.new()
 
-## 지형: 멀리서는 칸 색, 가까이 가면 바닥 무늬 (UV.x = 바닥 그림 번호, -1 이면 무늬 없음).
-## 무늬는 위치로 세 방향에서 찍어 섞기 때문에(삼면 투영) 칸 경계에서도 이어진다.
-const TERRAIN_SHADER := """
+## 꼭짓점 조합 바닥. 세 칸이 만나는 꼭짓점마다 삼각형 하나(그 세 칸의 가운데를 잇는)를 이루고,
+## 세 칸의 무늬를 무게(COLOR.rgb, 칸 가운데에서 1)로 섞는다. 무게에 노이즈를 더해 경계를 구불구불하게 하고,
+## 땅과 물이 만나는 곳에는 땅 쪽에 물가 무늬, 물 쪽에 물거품을 넣는다.
+## CUSTOM0 = 세 칸의 무늬 층 (a, b, c), 조합 완성 그림이 있으면 w = 1. CUSTOM1 = 세 칸의 물가 무늬 층.
+## UV = 조합 완성 그림 위의 좌표. 무늬는 위치로 세 방향에서 찍어 섞는다(삼면 투영).
+const SURFACE_SHADER := """
 shader_type spatial;
-uniform sampler2DArray ground : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
-uniform bool use_ground = true;
+uniform sampler2DArray tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D noise : filter_linear_mipmap, repeat_enable;
+uniform sampler2D combo : source_color, filter_linear_mipmap;
 uniform float tex_scale = 25.0;
 uniform float near_d = 0.6;
 uniform float far_d = 0.9;
+uniform float water_start = 100.0;
 varying vec3 opos;
 varying vec3 onrm;
+varying vec3 bw;
+varying vec4 lay;
+varying vec4 shl;
+
 void vertex() {
 	opos = VERTEX;
 	onrm = NORMAL;
+	bw = COLOR.rgb;
+	lay = CUSTOM0;
+	shl = CUSTOM1;
 }
+
+vec3 tri3(float layer, vec3 p, vec3 tw) {
+	return texture(tex, vec3(p.yz, layer)).rgb * tw.x
+		+ texture(tex, vec3(p.xz, layer)).rgb * tw.y
+		+ texture(tex, vec3(p.xy, layer)).rgb * tw.z;
+}
+
+float nz(vec3 p, vec3 tw) {
+	return texture(noise, p.yz).r * tw.x + texture(noise, p.xz).r * tw.y + texture(noise, p.xy).r * tw.z;
+}
+
 void fragment() {
-	vec3 col = COLOR.rgb;
-	float layer = UV.x;
-	if (use_ground && layer > -0.5) {
-		vec3 w = pow(abs(normalize(onrm)), vec3(4.0));
-		w /= (w.x + w.y + w.z);
-		vec3 p = opos * tex_scale;
-		vec3 t = texture(ground, vec3(p.yz, layer)).rgb * w.x
-			+ texture(ground, vec3(p.xz, layer)).rgb * w.y
-			+ texture(ground, vec3(p.xy, layer)).rgb * w.z;
-		float k = 1.0 - smoothstep(near_d, far_d, length(VERTEX));
-		col = mix(col, t, k * 0.9);
+	float k = 1.0 - smoothstep(near_d, far_d, length(VERTEX));
+	// 멀어지면 점점이 사라지며 칸 색으로 넘어간다
+	float h = fract(sin(dot(floor(FRAGCOORD.xy), vec2(12.9898, 78.233))) * 43758.5453);
+	if (h >= k) {
+		discard;
+	}
+	vec3 tw = pow(abs(normalize(onrm)), vec3(4.0));
+	tw /= (tw.x + tw.y + tw.z);
+	vec3 p = opos * tex_scale;
+	vec3 nv = vec3(nz(p * 0.35, tw), nz(p * 0.35 + vec3(3.7, 1.3, 5.1), tw), nz(p * 0.35 + vec3(7.1, 4.9, 2.3), tw));
+	vec3 w = clamp(bw + (nv - 0.5) * 0.55, 0.0, 1.0);
+	w = pow(w, vec3(5.0));
+	w /= (w.x + w.y + w.z + 1e-6);
+	vec3 isw = vec3(step(water_start - 0.5, lay.x), step(water_start - 0.5, lay.y), step(water_start - 0.5, lay.z));
+	vec3 ca = tri3(lay.x, p, tw);
+	vec3 cb = tri3(lay.y, p, tw);
+	vec3 cc = tri3(lay.z, p, tw);
+	vec3 col = ca * w.x + cb * w.y + cc * w.z;
+	float wet = 0.0;
+	// 땅과 물이 섞이면: 경계를 또렷하게, 땅 쪽에 물가 무늬, 물 쪽에 물거품
+	float anyw = isw.x + isw.y + isw.z;
+	if (anyw > 0.5 && anyw < 2.5) {
+		vec3 lw3 = w * (1.0 - isw);
+		vec3 ww3 = w * isw;
+		float lw = lw3.x + lw3.y + lw3.z;
+		float ww = ww3.x + ww3.y + ww3.z;
+		vec3 land = (ca * lw3.x + cb * lw3.y + cc * lw3.z) / max(lw, 1e-4);
+		vec3 water = (ca * ww3.x + cb * ww3.y + cc * ww3.z) / max(ww, 1e-4);
+		vec3 sh = vec3(0.0);
+		float shw = 0.0;
+		if (shl.x >= 0.0) { sh += tri3(shl.x, p, tw) * lw3.x; shw += lw3.x; }
+		if (shl.y >= 0.0) { sh += tri3(shl.y, p, tw) * lw3.y; shw += lw3.y; }
+		if (shl.z >= 0.0) { sh += tri3(shl.z, p, tw) * lw3.z; shw += lw3.z; }
+		if (shw > 1e-4) {
+			sh /= shw;
+			float s = 1.0 - smoothstep(0.55, 0.8, lw + (nz(p * 1.3, tw) - 0.5) * 0.2);
+			land = mix(land, sh, s);
+		}
+		float m = smoothstep(0.47, 0.53, lw);
+		float foam = smoothstep(0.3, 0.44, lw) * (1.0 - smoothstep(0.44, 0.5, lw));
+		foam *= smoothstep(0.35, 0.6, nz(p * 3.0, tw));
+		water = mix(water, vec3(0.93, 0.95, 0.93), foam * 0.85);
+		col = mix(water, land, m);
+		wet = 1.0 - m;
+	} else if (anyw > 2.5) {
+		wet = 1.0;
+	}
+	if (lay.w > 0.5) {
+		vec4 o = texture(combo, UV);
+		col = mix(col, o.rgb, o.a);
 	}
 	ALBEDO = col;
-	ROUGHNESS = 0.95;
-	SPECULAR = 0.1;
+	ROUGHNESS = mix(0.95, 0.35, wet);
+	SPECULAR = mix(0.1, 0.5, wet);
 }
 """
 
@@ -123,11 +185,22 @@ func _ready() -> void:
 	if tile_art == null:
 		tile_art = TileArt.new()
 		tile_art.load_all()
-	var tsh := Shader.new()
-	tsh.code = TERRAIN_SHADER
-	_terrain_mat.shader = tsh
-	_terrain_mat.set_shader_parameter("ground", tile_art.ground_tex)
-	terrain_mi.material_override = _terrain_mat
+	var mat := StandardMaterial3D.new()
+	mat.vertex_color_use_as_albedo = true
+	mat.roughness = 0.95
+	mat.metallic_specular = 0.1
+	terrain_mi.material_override = mat
+	var surf_sh := Shader.new()
+	surf_sh.code = SURFACE_SHADER
+	_surface_mat.shader = surf_sh
+	_surface_mat.set_shader_parameter("tex", tile_art.ground_tex)
+	_surface_mat.set_shader_parameter("water_start", float(tile_art.water_start))
+	_surface_mat.set_shader_parameter("noise", _make_noise())
+	if tile_art.combos.count > 0:
+		_surface_mat.set_shader_parameter("combo", tile_art.combos.texture)
+	surface_mi.material_override = _surface_mat
+	surface_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(surface_mi)
 	terrain_mi.mesh = terrain_mesh
 	add_child(terrain_mi)
 
@@ -159,7 +232,7 @@ func _ready() -> void:
 	rmat.albedo_color = Color("2a64a8")
 	rmat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	if _river_tex():
-		# 강물 그림(water/river)이 있으면 그 그림으로 칠한다
+		# 강물 그림(decal/river)이 있으면 그 그림으로 칠한다
 		rmat.albedo_color = Color.WHITE
 		rmat.albedo_texture = tile_art.decals.texture
 		rmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -210,8 +283,8 @@ void fragment() {
 	add_child(atmo_mi)
 
 	var prio := 0
-	# 그리는 순서: 경계 -> 강둑 -> 물가 -> (강물) -> 물 위 그림 -> 식생 -> 도로 -> 시설 -> 그림자
-	for mi in [art_edge_mi, river_bank_mi, art_shore_mi, art_water_mi, art_veg_mi, art_road_mi, art_struct_mi, art_shadow_mi]:
+	# 그리는 순서: (꼭짓점 조합 바닥) -> 강둑 -> 강물 -> 식생 -> 도로 -> 시설 -> 그림자
+	for mi in [river_bank_mi, art_veg_mi, art_road_mi, art_struct_mi, art_shadow_mi]:
 		var m := StandardMaterial3D.new()
 		m.albedo_texture = tile_art.decals.texture
 		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -349,16 +422,6 @@ func recolor() -> void:
 		var s: float = _vert_shade[v]
 		cols[v] = Color(col.r * s, col.g * s, col.b * s)
 	_arrays[Mesh.ARRAY_COLOR] = cols
-	var guv := PackedVector2Array()
-	guv.resize(_vert_tile.size())
-	var gidx := PackedInt32Array()
-	gidx.resize(hs.count)
-	for i in hs.count:
-		gidx[i] = tile_art.ground_index(gen, i)
-	for v in _vert_tile.size():
-		guv[v] = Vector2(gidx[_vert_tile[v]], 0.0)
-	_arrays[Mesh.ARRAY_TEX_UV] = guv
-	_terrain_mat.set_shader_parameter("use_ground", art_enabled and mode == Mode.BIOME)
 	terrain_mesh.clear_surfaces()
 	terrain_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _arrays)
 	# 수면은 지형/고도 보기에서만 덮는다
@@ -579,9 +642,9 @@ func _build_rivers() -> void:
 		if tex:
 			var seed: int = f
 			for _q in n1 - n0:
-				ruv.append(tile_art.decals.uv("water/river", 0.0, 0.0, seed))
-			ruv.append_array([tile_art.decals.uv("water/river", -0.98, -0.98, seed), tile_art.decals.uv("water/river", -0.98, 0.98, seed),
-				tile_art.decals.uv("water/river", 0.98, -0.98, seed), tile_art.decals.uv("water/river", 0.98, 0.98, seed)])
+				ruv.append(tile_art.decals.uv("decal/river", 0.0, 0.0, seed))
+			ruv.append_array([tile_art.decals.uv("decal/river", -0.98, -0.98, seed), tile_art.decals.uv("decal/river", -0.98, 0.98, seed),
+				tile_art.decals.uv("decal/river", 0.98, -0.98, seed), tile_art.decals.uv("decal/river", 0.98, 0.98, seed)])
 		_bank_strip(bank, pf, pd, w0 * 2.8, w1 * 2.8, -lift * 0.3)
 	var m := ArrayMesh.new()
 	if pos.size() > 0:
@@ -597,7 +660,7 @@ func _build_rivers() -> void:
 
 
 func _river_tex() -> bool:
-	return tile_art != null and tile_art.decals.has("water/river")
+	return tile_art != null and tile_art.decals.has("decal/river")
 
 
 func _strip(pos: PackedVector3Array, idx: PackedInt32Array, pts: Array, w0: float, w1: float) -> void:
@@ -725,7 +788,8 @@ func _build_art() -> void:
 	var px_per_unit: float = 900.0 / (2.0 * tan(deg_to_rad(20.0)))
 	var far_d: float = hs.spacing * px_per_unit / ART_MIN_PX
 	var near_d: float = hs.spacing * px_per_unit / ART_FULL_PX
-	for mi in [art_edge_mi, art_water_mi, art_veg_mi, art_road_mi, art_struct_mi, art_shadow_mi, art_sprite_mi, art_shore_mi, river_bank_mi]:
+	surface_mi.visible = show
+	for mi in [art_veg_mi, art_road_mi, art_struct_mi, art_shadow_mi, art_sprite_mi, river_bank_mi]:
 		mi.visible = show
 		if mi.material_override is StandardMaterial3D:
 			var m: StandardMaterial3D = mi.material_override
@@ -733,27 +797,21 @@ func _build_art() -> void:
 			m.distance_fade_max_distance = near_d
 	_sprite_mat.set_shader_parameter("near_d", near_d)
 	_sprite_mat.set_shader_parameter("far_d", far_d)
-	_terrain_mat.set_shader_parameter("near_d", near_d)
-	_terrain_mat.set_shader_parameter("far_d", far_d)
+	_surface_mat.set_shader_parameter("near_d", near_d)
+	_surface_mat.set_shader_parameter("far_d", far_d)
 	# 바닥 무늬 한 장이 칸 두 개쯤을 덮도록
-	_terrain_mat.set_shader_parameter("tex_scale", 1.0 / (hs.spacing * 2.0))
+	_surface_mat.set_shader_parameter("tex_scale", 1.0 / (hs.spacing * 2.0))
 	if not show:
 		return
+	_build_surface()
 	var veg := _ArtBuf.new()
 	var road := _ArtBuf.new()
 	var st := _ArtBuf.new()
 	var shadow := _ArtBuf.new()
 	var spr := _ArtBuf.new()
-	var shore := _ArtBuf.new()
-	var edge := _ArtBuf.new()
-	var water := _ArtBuf.new()
 	var D: TileArt.Atlas = tile_art.decals
 	for i in hs.count:
 		var seed: int = TileArt.tile_seed(gen, i, 2)
-		var wk: String = tile_art.water_key(gen, i)
-		if wk != "":
-			_art_fan(water, i, wk, 0.0, 0.0008, Color.WHITE, seed)
-		_art_edges(edge, i)
 		var vk: String = TileArt.veg_key(gen, i)
 		if vk != "" and D.has("decal/" + vk):
 			_art_fan(veg, i, "decal/" + vk, 0.0, 0.0006, Color.WHITE, seed)
@@ -762,7 +820,6 @@ func _build_art() -> void:
 		if sk != "" and D.has("decal/" + sk):
 			var tint: Color = TileArt.IDLE_TINT if gen.structure_state[i] == TileLayers.State.IDLE else Color.WHITE
 			_art_fan(st, i, "decal/" + sk, 0.0, 0.0012, tint, seed)
-		_art_shore(shore, i)
 		for e in TileArt.sprites_for(gen, i):
 			_art_sprite(spr, shadow, i, e[0], e[1], e[2], e[3], e[4], e[5])
 	art_veg_mi.mesh = veg.mesh()
@@ -770,44 +827,145 @@ func _build_art() -> void:
 	art_struct_mi.mesh = st.mesh()
 	art_shadow_mi.mesh = shadow.mesh()
 	art_sprite_mi.mesh = spr.mesh(true)
-	art_shore_mi.mesh = shore.mesh()
-	art_edge_mi.mesh = edge.mesh()
-	art_water_mi.mesh = water.mesh()
 
 
-## 경계: 이웃 칸과 겉모습이 다르면 그 변을 따라 이웃 쪽 바닥이 이 칸으로 번져 드는 띠를 깐다.
-## 그림은 edge/이칸__이웃. 위쪽 가장자리가 변에 닿고 아래로 갈수록 옅어진다.
-func _art_edges(buf: _ArtBuf, i: int) -> void:
-	var off: int = hs.nb_offsets[i]
-	var deg: int = hs.degree(i)
-	var land: bool = TileArt.is_land(gen, i)
-	var c: Vector3 = hs.centers[i]
-	var wl: float = 0.0
-	if not land:
-		wl = lake_level(i) if gen.is_lake[i] == 1 else 1.0
-	var pc: Vector3 = c * (tile_radius[i] if land else wl)
-	for k in deg:
-		var j: int = hs.nb_list[off + k]
-		var key: String = tile_art.edge_key(gen, i, j)
-		if key == "":
-			continue
-		var ka: int = off + k
-		var kb: int = off + (k + 1) % deg
-		var a: Vector3 = corner_pos(ka) if land else hs.corner_list[ka] * wl
-		var b: Vector3 = corner_pos(kb) if land else hs.corner_list[kb] * wl
-		var seed: int = TileArt.tile_seed(gen, i, 10 + k)
-		var rows: Array = [[a, b, 1.0], [a.lerp(pc, 0.45), b.lerp(pc, 0.45), -1.0]]
-		var base: int = buf.pos.size()
-		for r in rows:
-			for q in 2:
-				var p: Vector3 = r[q]
-				p += p.normalized() * (0.0003 if land else 0.0006)
-				buf.pos.append(p)
-				buf.nrm.append(p.normalized())
-				buf.col.append(Color.WHITE)
-				buf.uv.append(tile_art.decals.uv(key, -0.98 if q == 0 else 0.98, r[2] * 0.98, seed))
-		buf.tri(base, base + 1, base + 3)
-		buf.tri(base, base + 3, base + 2)
+func _make_noise() -> ImageTexture:
+	var fn := FastNoiseLite.new()
+	fn.seed = 7
+	fn.frequency = 0.02
+	fn.fractal_octaves = 3
+	var img: Image = fn.get_seamless_image(256, 256)
+	img.generate_mipmaps()
+	return ImageTexture.create_from_image(img)
+
+
+## 물 칸이 하나라도 닿은 점은 수면 높이로 올린다
+func _water_level_at(tiles: Array) -> float:
+	var wl: float = -1.0
+	for t in tiles:
+		if gen.base[t] != TileLayers.Base.LAND:
+			wl = maxf(wl, lake_level(t) if gen.is_lake[t] == 1 else 1.0)
+	return wl
+
+
+func _lifted(p: Vector3, tiles: Array) -> Vector3:
+	var r: float = p.length()
+	var wl: float = _water_level_at(tiles)
+	if wl > 0.0:
+		r = maxf(r, wl)
+	return p / p.length() * (r + 0.0003)
+
+
+## 꼭짓점 조합 바닥: 꼭짓점(면) f 마다 세 칸 a, b, c 의 가운데와 변 가운데로 이루어진 육각형(삼각형 6개)을
+## 만든다. 각 조각은 그 칸의 부채꼴 지형 위에 정확히 놓인다.
+func _build_surface() -> void:
+	var sig := PackedInt32Array()
+	sig.resize(hs.count * 2)
+	for i in hs.count:
+		sig[i * 2] = tile_art.class_layer(gen, i)
+		sig[i * 2 + 1] = tile_art.shore_layer(gen, i)
+	if sig == _surface_sig and surface_mi.mesh != null:
+		return
+	_surface_sig = sig
+	var F: int = hs.face_centers.size()
+	var nv: int = F * 7
+	var pos := PackedVector3Array()
+	pos.resize(nv)
+	var nrm := PackedVector3Array()
+	nrm.resize(nv)
+	var col := PackedColorArray()
+	col.resize(nv)
+	var uv := PackedVector2Array()
+	uv.resize(nv)
+	var c0 := PackedFloat32Array()
+	c0.resize(nv * 4)
+	var c1 := PackedFloat32Array()
+	c1.resize(nv * 4)
+	var idx := PackedInt32Array()
+	idx.resize(F * 18)
+	var C: TileArt.Atlas = tile_art.combos
+	var has_combo: bool = C.count > 0
+	# 조합 완성 그림 위 삼각형 꼭짓점 (위, 왼쪽 아래, 오른쪽 아래)
+	var img_v: Array = [Vector2(0.0, 0.86), Vector2(-0.86, -0.63), Vector2(0.86, -0.63)]
+	for f in F:
+		var t: Array = [hs.face_tiles[f * 3], hs.face_tiles[f * 3 + 1], hs.face_tiles[f * 3 + 2]]
+		var ctr: Array = [hs.centers[t[0]], hs.centers[t[1]], hs.centers[t[2]]]
+		# 바깥에서 보아 반시계 방향으로
+		if (ctr[1] - ctr[0]).cross(ctr[2] - ctr[0]).dot(hs.face_centers[f]) < 0.0:
+			t = [t[0], t[2], t[1]]
+			ctr = [ctr[0], ctr[2], ctr[1]]
+		var pf: Vector3 = _lifted(_face_pos(f), t)
+		var cp: Array = []
+		for q in 3:
+			var ti: int = t[q]
+			cp.append(_lifted(hs.centers[ti] * tile_radius[ti], [ti]))
+		var mp: Array = []
+		for q in 3:
+			var ta: int = t[q]
+			var tb: int = t[(q + 1) % 3]
+			# 칸 ta 와 tb 사이 변의 반대쪽 끝 꼭짓점
+			var g: int = -1
+			for e in 3:
+				var h: int = hs.face_nb[f * 3 + e]
+				if h < 0:
+					continue
+				var ht: PackedInt32Array = hs.face_tiles.slice(h * 3, h * 3 + 3)
+				if ht.has(ta) and ht.has(tb):
+					g = h
+					break
+			var other: Vector3 = _face_pos(g) if g >= 0 else _face_pos(f)
+			mp.append(_lifted((_face_pos(f) + other) * 0.5, [ta, tb]))
+		var la: Array = [sig[t[0] * 2], sig[t[1] * 2], sig[t[2] * 2]]
+		var sa: Array = [sig[t[0] * 2 + 1], sig[t[1] * 2 + 1], sig[t[2] * 2 + 1]]
+		var ckey: String = ""
+		var crot: int = 0
+		if has_combo:
+			var cn: Array = TileArt.combo_name(TileArt.surface_class(gen, t[0]), TileArt.surface_class(gen, t[1]), TileArt.surface_class(gen, t[2]))
+			if C.has(cn[0]):
+				ckey = cn[0]
+				crot = cn[1]
+		var base: int = f * 7
+		# 0: 꼭짓점, 1..3: 칸 가운데, 4..6: 변 가운데 (q 와 q+1 사이)
+		var pts: Array = [pf, cp[0], cp[1], cp[2], mp[0], mp[1], mp[2]]
+		var ws: Array = [Vector3(1, 1, 1) / 3.0, Vector3(1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, 1),
+			Vector3(0.5, 0.5, 0), Vector3(0, 0.5, 0.5), Vector3(0.5, 0, 0.5)]
+		for v in 7:
+			var p: Vector3 = pts[v]
+			var w: Vector3 = ws[v]
+			pos[base + v] = p
+			nrm[base + v] = p.normalized()
+			col[base + v] = Color(w.x, w.y, w.z)
+			var o: int = (base + v) * 4
+			c0[o] = la[0]
+			c0[o + 1] = la[1]
+			c0[o + 2] = la[2]
+			c0[o + 3] = 1.0 if ckey != "" else 0.0
+			c1[o] = sa[0]
+			c1[o + 1] = sa[1]
+			c1[o + 2] = sa[2]
+			if ckey != "":
+				# 슬롯 q 가 그림의 (q - 돌린 수) 번째 꼭짓점
+				var ip := Vector2.ZERO
+				for q in 3:
+					ip += img_v[posmod(q - crot, 3)] * w[q]
+				uv[base + v] = C.uv(ckey, ip.x, ip.y, f)
+		# 앞면이 바깥을 향하도록 (Godot 는 시계 방향이 앞면)
+		var tris: Array = [0, 4, 1, 0, 2, 4, 0, 5, 2, 0, 3, 5, 0, 6, 3, 0, 1, 6]
+		for q in 18:
+			idx[f * 18 + q] = base + tris[q]
+	var arr: Array = []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = pos
+	arr[Mesh.ARRAY_NORMAL] = nrm
+	arr[Mesh.ARRAY_COLOR] = col
+	arr[Mesh.ARRAY_TEX_UV] = uv
+	arr[Mesh.ARRAY_CUSTOM0] = c0
+	arr[Mesh.ARRAY_CUSTOM1] = c1
+	arr[Mesh.ARRAY_INDEX] = idx
+	var fl: int = (Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT) | (Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM1_SHIFT)
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr, [], {}, fl)
+	surface_mi.mesh = m
 
 
 ## 칸 i 의 점 (x, y) (칸 좌표, 꼭짓점까지 1) 아래 지형 표면 위치
@@ -860,50 +1018,6 @@ func _art_sprite(buf: _ArtBuf, shadow: _ArtBuf, i: int, key: String, x: float, y
 			shadow.uv.append(tile_art.decals.uv("decal/shadow", corner.x, corner.y))
 		shadow.tri(sb, sb + 2, sb + 1)
 		shadow.tri(sb, sb + 3, sb + 2)
-
-
-## 해안과 호숫가: 땅 칸에서 물과 닿는 변마다 모래톱(땅 쪽)과 물거품(물 쪽) 띠를 깐다.
-func _art_shore(buf: _ArtBuf, i: int) -> void:
-	if gen.base[i] != TileLayers.Base.LAND:
-		return
-	var off: int = hs.nb_offsets[i]
-	var deg: int = hs.degree(i)
-	var c: Vector3 = hs.centers[i]
-	var pc: Vector3 = c * tile_radius[i]
-	var lift: float = 0.0004
-	for k in deg:
-		var j: int = hs.nb_list[off + k]
-		if gen.base[j] == TileLayers.Base.LAND:
-			continue
-		var skey: String = tile_art.shore_key(gen, i, j)
-		if skey == "":
-			continue
-		var seed: int = TileArt.tile_seed(gen, i, 20 + k)
-		var wl: float = lake_level(j) if gen.is_lake[j] == 1 else 1.0
-		var ka: int = off + k
-		var kb: int = off + (k + 1) % deg
-		var a: Vector3 = corner_pos(ka)
-		var b: Vector3 = corner_pos(kb)
-		a = a.normalized() * maxf(a.length(), wl)
-		b = b.normalized() * maxf(b.length(), wl)
-		var a_in: Vector3 = a.lerp(pc, 0.3)
-		var b_in: Vector3 = b.lerp(pc, 0.3)
-		var a_out: Vector3 = (hs.corner_list[ka] + (hs.corner_list[ka] - c) * 0.3).normalized() * wl
-		var b_out: Vector3 = (hs.corner_list[kb] + (hs.corner_list[kb] - c) * 0.3).normalized() * wl
-		var rows: Array = [[a_out, b_out, 1.0], [a, b, 0.0], [a_in, b_in, -1.0]]
-		var base: int = buf.pos.size()
-		for r in rows:
-			for q in 2:
-				var p: Vector3 = r[q]
-				p += p.normalized() * lift
-				buf.pos.append(p)
-				buf.nrm.append(p.normalized())
-				buf.col.append(Color.WHITE)
-				buf.uv.append(tile_art.decals.uv(skey, -0.98 if q == 0 else 0.98, r[2] * 0.98, seed))
-		for r in 2:
-			var v: int = base + r * 2
-			buf.tri(v, v + 1, v + 3)
-			buf.tri(v, v + 3, v + 2)
 
 
 ## 강줄기 아래 흙둑 띠

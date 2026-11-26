@@ -6,16 +6,18 @@ extends RefCounted
 ## 파일 이름 규칙 (자세한 내용은 art/tiles/README.md):
 ##
 ##   이름.svg, 이름.2.svg, 이름.3.svg ...   같은 그림의 변주. 칸마다 정해진 하나를 고른다.
-##   이칸__이웃.svg                         이 칸과 이웃 칸의 조합에 쓰는 그림 (경계, 물가)
-##   any                                    조합 그림이 없을 때 쓰는 자리 표시 (any__ocean 등)
+##   A_B_C.svg (combo/)                     세 칸이 만나는 꼭짓점의 조합 완성 그림
+##
+## 바닥은 칸마다 따로 칠하지 않고, 세 칸이 만나는 꼭짓점마다 그 세 칸의 조합으로 한 장의 그림을
+## 만든다 (문명3 가 네 칸 꼭짓점마다 조합 그림을 쓰는 방식의 육각형판). 그래서 칸 경계에 직선 이음매가
+## 생기지 않고, 땅·물·물가·물거품이 한 그림 안에서 섞인다. combo/ 에 그 조합의 완성 그림이 있으면
+## 그 그림을 쓰고, 없으면 바닥 무늬로 자동 합성한다.
 ##
 ## 폴더:
-##   ground/  바닥 무늬 (이음매 없이 반복). 1층 지형·기후로 고른다.
-##   decal/   칸 위에 깔리는 그림 (식생 바닥, 밭, 광장, 도로, 그림자, 강둑)
+##   ground/  바닥 무늬 (이음매 없이 반복): 땅(grass ...), 물(deep, shallow, lake, ice), 물가 땅(shore_sand ...)
+##   combo/   꼭짓점 조합 완성 그림 (선택). 없으면 자동 합성.
+##   decal/   칸 위에 깔리는 그림 (식생 바닥, 밭, 광장, 도로, 그림자, 강둑, 강물)
 ##   sprite/  세워 그리는 그림 (나무, 집, 천막 ...)
-##   edge/    이웃 바닥이 이 칸으로 번져 드는 경계 그림 (grass__desert: 초원 칸의 사막 쪽 변)
-##   shore/   땅과 물이 닿는 띠 (sand__ocean: 모래 땅과 바다)
-##   water/   물 위 그림 (deep, shallow, lake, ice) 과 강물(river)
 ## SVG 와 PNG 를 모두 쓸 수 있다. 같은 이름의 PNG 가 있으면 SVG 대신 쓴다.
 
 const ART_DIR := "res://art/tiles/"
@@ -43,26 +45,44 @@ const STRUCT_SPRITES := {
 ## 방치된 시설은 조금 어둡고 바랜 색으로
 const IDLE_TINT := Color(0.72, 0.68, 0.62)
 
+## 물 무늬 (이 순서대로 ground_tex 의 맨 뒤에 놓인다. 셰이더가 water_start 이후를 물로 본다)
+const WATER_CLASSES := ["deep", "shallow", "lake"]
+
 var ground_tex: Texture2DArray
+var water_start: int = 0          # ground_tex 에서 물 무늬가 시작하는 층
 var _ground_layers := {}          # 바닥 이름 -> [층 번호...]
-## decal, edge, shore, water 폴더를 한 장에 모은다. 이름은 "폴더/이름" (예: "shore/sand__ocean")
+## decal 폴더. 이름은 "decal/이름"
 var decals := Atlas.new(256, 10)
 var sprites := Atlas.new(128, 8)
+## combo 폴더: 꼭짓점 조합 완성 그림. 이름은 "A_B_C"
+var combos := Atlas.new(256, 8)
 
 
 ## art/tiles/ 의 그림을 모두 읽는다.
 func load_all() -> void:
 	var flat := {}
-	for folder in ["decal", "edge", "shore", "water"]:
-		for e in scan(folder):
-			flat[folder + "/" + e[0]] = e[1]
+	for e in scan("decal"):
+		flat["decal/" + e[0]] = e[1]
 	decals.build(flat)
+	var cmb := {}
+	for e in scan("combo"):
+		cmb[e[0]] = e[1]
+	combos.build(cmb)
 	var spr := {}
 	for e in scan("sprite"):
 		spr[e[0]] = e[1]
 	sprites.build(spr)
 	var imgs: Array[Image] = []
-	for e in scan("ground"):
+	# 물 무늬를 맨 뒤로
+	var entries: Array = scan("ground")
+	var land_e: Array = []
+	var water_e: Array = []
+	for e in entries:
+		(water_e if WATER_CLASSES.has(Atlas.base_name(e[0])) else land_e).append(e)
+	water_start = -1
+	for e in land_e + water_e:
+		if water_start < 0 and water_e.has(e):
+			water_start = imgs.size()
 		var img: Image = Atlas.load_image(e[1], 256)
 		if img == null:
 			continue
@@ -72,6 +92,8 @@ func load_all() -> void:
 			_ground_layers[key] = []
 		_ground_layers[key].append(imgs.size())
 		imgs.append(img)
+	if water_start < 0:
+		water_start = imgs.size()
 	if imgs.is_empty():
 		var blank := Image.create_empty(4, 4, true, Image.FORMAT_RGBA8)
 		blank.fill(Color(0.5, 0.5, 0.5))
@@ -240,14 +262,23 @@ static func is_land(gen: WorldGen, i: int) -> bool:
 	return gen.base[i] == TileLayers.Base.LAND
 
 
-## 바닥 무늬 층 번호. 물이면 -1. 같은 바닥에 변주가 여럿이면 칸마다 하나를 고른다.
-func ground_index(gen: WorldGen, i: int) -> int:
+## 칸의 바닥 무늬 층 번호 (땅이면 바닥, 물이면 물 무늬). 변주가 여럿이면 칸마다 하나를 고른다. 없으면 -1.
+func class_layer(gen: WorldGen, i: int) -> int:
+	return _pick_layer(surface_class(gen, i), tile_seed(gen, i))
+
+
+## 땅 칸이 물과 만날 때 쓰는 물가 무늬 층 번호. 물 칸이면 -1.
+func shore_layer(gen: WorldGen, i: int) -> int:
 	if not is_land(gen, i):
 		return -1
-	var layers: Array = _ground_layers.get(surface_class(gen, i), [])
+	return _pick_layer("shore_" + shore_class(gen, i), tile_seed(gen, i, 3))
+
+
+func _pick_layer(key: String, seed: int) -> int:
+	var layers: Array = _ground_layers.get(key, [])
 	if layers.is_empty():
 		return -1
-	return layers[tile_seed(gen, i) % layers.size()]
+	return layers[seed % layers.size()]
 
 
 ## 이 칸의 땅이 물과 닿는 모양: sand, grass, mud, rock, ice, gravel
@@ -264,35 +295,20 @@ static func shore_class(gen: WorldGen, i: int) -> String:
 		"desert", "plains":
 			return "sand"
 	# 열대 바다는 모래 해변, 나머지 습윤한 땅은 풀밭 물가
-	if gen.temp_band[i] == TileLayers.TempBand.TROPICAL and gen.base[i] == TileLayers.Base.LAND:
+	if gen.temp_band[i] == TileLayers.TempBand.TROPICAL:
 		return "sand"
 	return "grass"
 
 
-## 땅 칸 i 와 물 칸 j 사이 물가 그림 이름 ("shore/..."). 없으면 "".
-func shore_key(gen: WorldGen, i: int, j: int) -> String:
-	var land: String = shore_class(gen, i)
-	var water: String = "lake" if gen.base[j] == TileLayers.Base.LAKE else "ocean"
-	return decals.resolve(["shore/%s__%s" % [land, water], "shore/%s__any" % land, "shore/any__%s" % water, "shore/any__any"])
-
-
-## 칸 i 의 이웃 j 쪽 변에 깔 경계 그림 이름 ("edge/..."). 같은 겉모습이거나 땅과 물 사이면 "".
-func edge_key(gen: WorldGen, i: int, j: int) -> String:
-	if is_land(gen, i) != is_land(gen, j):
-		return ""
-	var a: String = surface_class(gen, i)
-	var b: String = surface_class(gen, j)
-	if a == b:
-		return ""
-	return decals.resolve(["edge/%s__%s" % [a, b], "edge/%s__any" % a, "edge/any__%s" % b])
-
-
-## 물 칸 위에 얹을 그림 이름 ("water/..."). 없으면 "".
-func water_key(gen: WorldGen, i: int) -> String:
-	if is_land(gen, i):
-		return ""
-	var k: String = "water/" + surface_class(gen, i)
-	return k if decals.has(k) else ""
+## 꼭짓점 조합 이름: 세 칸의 겉모습을 바깥에서 보아 반시계 방향으로 이은 것을, 사전순으로 가장 앞서게
+## 돌린 것. 돌린 칸 수도 함께 돌려준다 ([이름, 돌린 수]). 그림 삼각형은 위 -> 왼쪽 아래 -> 오른쪽 아래 순서.
+static func combo_name(a: String, b: String, c: String) -> Array:
+	var rots: Array = [[a, b, c], [b, c, a], [c, a, b]]
+	var best: int = 0
+	for r in 3:
+		if "_".join(rots[r]) < "_".join(rots[best]):
+			best = r
+	return ["_".join(rots[best]), best]
 
 
 ## 2층 식생의 납작한 그림 이름 (decal/ 아래). 없으면 "".
