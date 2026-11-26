@@ -251,7 +251,9 @@ func _ready() -> void:
 	var gmat := StandardMaterial3D.new()
 	gmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	gmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	gmat.albedo_color = Color(0.12, 0.09, 0.05, 0.13)
+	gmat.albedo_color = Color(0.1, 0.07, 0.03, 0.45)
+	gmat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	gmat.render_priority = 5
 	grid_mi.material_override = gmat
 	add_child(grid_mi)
 
@@ -683,9 +685,10 @@ func _river_pad(ruv: PackedVector2Array, rcol: PackedColorArray, n: int, seed: i
 			ruv.append(tile_art.decals.uv("decal/river", 0.0, 0.0, seed))
 
 
-## 하구: 강이 끝나는 꼭짓점(d)에서 물 칸 쪽으로 강을 더 끌고 들어가 물빛으로 스며들게 한다.
-## 물가선은 꼭짓점이 아니라 물 칸 쪽으로 구불구불 들어가 있으므로, 꼭짓점에서 멈추면 끊겨 보인다.
-## 큰 강은 여러 갈래로 갈라지는 삼각주를 만들고, 갈래 밑에 흙둑을 넓게 깔아 땅이 바다로 뻗은 모양을 낸다.
+## 하구: 강이 끝나는 꼭짓점(d)은 물 칸과 닿아 있고, 바닥 합성에서 물이 이 꼭짓점까지 파고들어 온다 (_build_surface).
+## 강은 거기서 물 쪽으로 조금 더 들어가 물빛으로 스며든다.
+## 큰 강은 삼각주: 마지막 구간 중간에서 갈라져, 강 좌우의 땅 칸 위를 지나 양옆 해안선(물 칸과 땅 칸 사이 변의 가운데)으로
+## 흘러든다. 갈래 밑에는 모래·갯벌 띠를 넓게 깔아, 바다 위가 아니라 땅 쪽에 삼각주가 생긴다.
 func _river_mouth(pos: PackedVector3Array, idx: PackedInt32Array, ruv: PackedVector2Array, rcol: PackedColorArray,
 		bank: _ArtBuf, pts: Array, f: int, d: int, w: float, wk: float, lift: float, flow: float, tex: bool) -> void:
 	var pd: Vector3 = pts[pts.size() - 1]
@@ -695,7 +698,7 @@ func _river_mouth(pos: PackedVector3Array, idx: PackedInt32Array, ruv: PackedVec
 	var nw: int = 0
 	for q in 3:
 		var t: int = hs.face_tiles[d * 3 + q]
-		if gen.elevation[t] < 0.0 or gen.is_lake[t] == 1:
+		if _is_water_tile(t):
 			target += hs.centers[t]
 			nw += 1
 	if nw == 0:
@@ -707,38 +710,65 @@ func _river_mouth(pos: PackedVector3Array, idx: PackedInt32Array, ruv: PackedVec
 	if reach < 1e-6:
 		return
 	var dw: Vector3 = into / reach
-	var din: Vector3 = (pd - pts[pts.size() - 2])
-	din -= up * din.dot(up)
-	din = din.normalized() if din.length_squared() > 1e-14 else dw
-	var side: Vector3 = dw.cross(up).normalized()
-	var big: bool = flow > 0.3
-	var dirs: Array = [0.0]
-	if big:
-		dirs = [-0.9, 0.0, 0.85] if flow > 0.6 else [-0.65, 0.6]
-	var h: int = hash(Vector2i(d, 77))
-	for bi in dirs.size():
-		var ang: float = dirs[bi] + (float((h >> (bi * 4)) & 15) / 15.0 - 0.5) * 0.3
-		var dirb: Vector3 = dw * cos(ang) + side * sin(ang)
-		var len: float = reach * (1.05 if big else 0.8) * (1.0 - absf(ang) * 0.25)
-		var ctrl: Vector3 = pd + din * len * 0.35
-		var end: Vector3 = pd + dirb * len
+	# 본류: 꼭짓점에서 물 쪽으로 조금 더, 넓어지며 스며든다
+	_river_tail(pos, idx, ruv, rcol, pd, dw, reach * 0.45, w, wk, r, d, tex)
+	# 삼각주는 강 좌우가 모두 땅이고 물 칸이 앞에 하나만 있을 때 (강이 해안을 따라 흐르는 경우는 빼고)
+	if flow <= 0.3 or nw != 1:
+		return
+	# 삼각주 갈래: 마지막 구간 중간에서 갈라져 양옆 해안선으로
+	var fork: Vector3 = pts[int(pts.size() * 0.4)]
+	var wb: float = w * 0.6
+	var bi: int = 0
+	for e in 3:
+		var g: int = hs.face_nb[d * 3 + e]
+		if g < 0 or g == f:
+			continue
+		# d-g 변이 물 칸과 땅 칸 사이(해안선)인지
+		var shared: Array = []
+		for q in 3:
+			var t: int = hs.face_tiles[d * 3 + q]
+			for q2 in 3:
+				if hs.face_tiles[g * 3 + q2] == t:
+					shared.append(t)
+		if shared.size() != 2 or _is_water_tile(shared[0]) == _is_water_tile(shared[1]):
+			continue
+		var end: Vector3 = ((pd + _face_pos(g)) * 0.5).normalized() * r
+		var ctrl: Vector3 = (fork + pd) * 0.5
 		var bp: Array = []
 		var n: int = 8
+		var side: Vector3 = (end - fork).cross(up).normalized()
 		for k in n + 1:
 			var t: float = float(k) / n
-			var c: Vector3 = _bez3(pd, ctrl, end, t)
-			# 갈래마다 살짝 굽이친다
-			c += side * sin(PI * t) * sin(PI * t * 2.0 + float(bi)) * reach * 0.06
+			var c: Vector3 = _bez3(fork, ctrl, end, t)
+			c += side * sin(PI * t) * sin(PI * t * 2.0 + float(bi)) * reach * 0.05
 			bp.append(c.normalized() * r)
-		var wb: float = w * (0.65 if dirs.size() > 1 else 1.0)
-		_disc(pos, idx, pd, up, wb * 0.5)
+		_disc(pos, idx, fork, fork.normalized(), wb * 0.5)
 		_river_pad(ruv, rcol, pos.size(), d, tex)
-		_river_piece(pos, idx, ruv, rcol, bp, wb * wk, wb * wk * 1.8, 1.0, 0.0, d + bi, tex)
-		if big:
-			# 삼각주 땅: 갈래 밑의 흙둑을 넓게, 끝으로 갈수록 좁게
-			_bank_strip(bank, bp.slice(0, 8), wb * 4.0, wb * 2.6, -lift * 0.3, 0.4)
-		else:
-			_bank_strip(bank, bp.slice(0, 5), w * 2.8, w * 2.4, -lift * 0.3, 0.7)
+		_river_piece(pos, idx, ruv, rcol, bp, wb * wk, wb * wk * 1.2, 1.0, 1.0, d + 7 + bi, tex)
+		# 삼각주 땅: 갈래 밑을 넓은 모래·갯벌 띠로
+		_bank_strip(bank, bp, wb * 4.5, wb * 3.5, -lift * 0.3, 0.25)
+		var out: Vector3 = end - bp[n - 1]
+		out -= up * out.dot(up)
+		_river_tail(pos, idx, ruv, rcol, end, (out.normalized() + dw).normalized(), reach * 0.35, wb, wk, r, d + 11 + bi, tex)
+		bi += 1
+	if bi > 0:
+		# 갈래 사이 본류 둘레도 넓게
+		_bank_strip(bank, pts.slice(int(pts.size() * 0.4)), w * 3.5, w * 4.5, -lift * 0.3, 0.25)
+
+
+## 강 끝에서 물 쪽으로 넓어지며 사라지는 짧은 꼬리
+func _river_tail(pos: PackedVector3Array, idx: PackedInt32Array, ruv: PackedVector2Array, rcol: PackedColorArray,
+		p: Vector3, dir: Vector3, len: float, w: float, wk: float, r: float, seed: int, tex: bool) -> void:
+	var tp: Array = []
+	for k in 5:
+		tp.append((p + dir * len * float(k) / 4.0).normalized() * r)
+	_disc(pos, idx, p, p.normalized(), w * 0.5)
+	_river_pad(ruv, rcol, pos.size(), seed, tex)
+	_river_piece(pos, idx, ruv, rcol, tp, w * wk, w * wk * 1.8, 1.0, 0.0, seed, tex)
+
+
+func _is_water_tile(t: int) -> bool:
+	return gen.elevation[t] < 0.0 or gen.is_lake[t] == 1
 
 
 const RIVER_STEPS := 10
@@ -831,10 +861,12 @@ func _disc(pos: PackedVector3Array, idx: PackedInt32Array, c: Vector3, nrm: Vect
 		idx.append_array([s, s + 1 + k, s + 1 + (k + 1) % 16])
 
 
-## 타일 경계선. 육지 위에만 그린다.
+## 타일 경계선. 육지 위에만 그린다. 1 픽셀 선은 바닥 그림에 묻혀 안 보이므로 얇은 띠로 그린다.
 func _build_grid() -> void:
 	var pos := PackedVector3Array()
-	var lift: float = 0.0006
+	var idx := PackedInt32Array()
+	var lift: float = 0.0012
+	var w: float = hs.spacing * 0.03
 	for i in hs.count:
 		var off: int = hs.nb_offsets[i]
 		var deg: int = hs.degree(i)
@@ -848,14 +880,14 @@ func _build_grid() -> void:
 				continue
 			var a: Vector3 = corner_pos(off + k)
 			var b: Vector3 = corner_pos(off + (k + 1) % deg)
-			pos.append(a + a.normalized() * lift)
-			pos.append(b + b.normalized() * lift)
+			_ribbon(pos, idx, a + a.normalized() * lift, b + b.normalized() * lift, w)
 	var m := ArrayMesh.new()
 	if pos.size() > 0:
 		var arr: Array = []
 		arr.resize(Mesh.ARRAY_MAX)
 		arr[Mesh.ARRAY_VERTEX] = pos
-		m.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, arr)
+		arr[Mesh.ARRAY_INDEX] = idx
+		m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 	grid_mi.mesh = m
 
 
@@ -1011,6 +1043,13 @@ func _build_surface() -> void:
 	var has_combo: bool = C.count > 0
 	# 조합 완성 그림 위 삼각형 꼭짓점 (위, 왼쪽 아래, 오른쪽 아래)
 	var img_v: Array = [Vector2(0.0, 0.86), Vector2(-0.86, -0.63), Vector2(0.86, -0.63)]
+	# 강이 물로 드는 꼭짓점
+	var mouth := PackedByteArray()
+	mouth.resize(F)
+	for g in F:
+		var dd: int = gen.c_down[g]
+		if gen.c_river[g] == 1 and dd >= 0 and gen.c_river[dd] == 0:
+			mouth[dd] = 1
 	for f in F:
 		var t: Array = [hs.face_tiles[f * 3], hs.face_tiles[f * 3 + 1], hs.face_tiles[f * 3 + 2]]
 		var ctr: Array = [hs.centers[t[0]], hs.centers[t[1]], hs.centers[t[2]]]
@@ -1053,6 +1092,19 @@ func _build_surface() -> void:
 		var pts: Array = [pf, cp[0], cp[1], cp[2], mp[0], mp[1], mp[2]]
 		var ws: Array = [Vector3(1, 1, 1) / 3.0, Vector3(1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, 1),
 			Vector3(0.5, 0.5, 0), Vector3(0, 0.5, 0.5), Vector3(0.5, 0, 0.5)]
+		if mouth[f] == 1:
+			# 강 하구 꼭짓점: 물이 꼭짓점까지 파고들어(만) 강 끝과 바로 이어지게 한다.
+			# 꼭짓점(0번)의 무게만 물 칸 쪽으로 몰고, 이웃 삼각형과 맞닿은 변 가운데 점은 그대로 둔다.
+			var wc := Vector3.ZERO
+			for q in 3:
+				wc[q] = 1.0 if _is_water_tile(t[q]) else 0.25
+			ws[0] = wc / (wc.x + wc.y + wc.z)
+		elif gen.c_river[f] == 1:
+			# 강이 지나는 꼭짓점은 땅으로 남겨, 물가 합성이 강을 물에 잠기게 하지 않는다
+			var wl := Vector3.ZERO
+			for q in 3:
+				wl[q] = 0.25 if _is_water_tile(t[q]) else 1.0
+			ws[0] = wl / (wl.x + wl.y + wl.z)
 		for v in 7:
 			var p: Vector3 = pts[v]
 			var w: Vector3 = ws[v]
