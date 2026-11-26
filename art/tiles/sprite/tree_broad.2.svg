@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+<!-- 활엽수. 세워 그리는 그림: 바닥에 닿는 점이 (64,124), 밝은 잎 (gen_placeholders.py 로 색만 바꾼 변주) -->
+<g transform="translate(64,124) scale(2.6)"><path d="M-2,1 L-2,-12 L2,-12 L2,1 Z" fill="#5a3d22"/><path d="M0,-40 C-10,-41 -18,-33 -17,-24 C-22,-20 -21,-10 -13,-8 C-9,-3 0,-4 3,-8 C10,-4 19,-8 18,-16 C23,-22 18,-32 11,-33 C9,-39 4,-41 0,-40 Z" fill="#6f9a36" stroke="#22381a" stroke-width="1.2"/><path d="M-13,-26 C-11,-33 -3,-37 4,-34 C-2,-31 -8,-27 -9,-20 Z" fill="#c4dc80" opacity="0.5"/><path d="M5,-10 C12,-8 16,-12 16,-17 C12,-13 8,-12 5,-10 Z" fill="#2c4a1c" opacity="0.6"/></g>
+</svg>
