@@ -154,11 +154,11 @@ for k, name in enumerate(SHORES):
 
 
 out("decal", "river", "강물: 가로로 늘여 쓰는 띠. 가운데가 물, 위아래 끝은 투명",
-    '<defs><linearGradient id="r" x1="0" y1="0" x2="0" y2="1"><stop offset="0.12" stop-color="#2a64a8" stop-opacity="0"/>'
-    '<stop offset="0.22" stop-color="#2f6cae" stop-opacity="1"/><stop offset="0.5" stop-color="#3a7cbc" stop-opacity="1"/>'
-    '<stop offset="0.78" stop-color="#2f6cae" stop-opacity="1"/><stop offset="0.88" stop-color="#2a64a8" stop-opacity="0"/></linearGradient></defs>\n'
+    '<defs><linearGradient id="r" x1="0" y1="0" x2="0" y2="1"><stop offset="0.12" stop-color="#38728c" stop-opacity="0"/>'
+    '<stop offset="0.22" stop-color="#3a7792" stop-opacity="1"/><stop offset="0.5" stop-color="#46889e" stop-opacity="1"/>'
+    '<stop offset="0.78" stop-color="#3a7792" stop-opacity="1"/><stop offset="0.88" stop-color="#38728c" stop-opacity="0"/></linearGradient></defs>\n'
     '<rect width="256" height="256" fill="url(#r)"/>\n'
-    + "".join(f'<path d="M{x:.0f},{y:.0f} q12,-4 24,0" stroke="#9cd0ee" stroke-width="3" fill="none" opacity="0.6" stroke-linecap="round"/>'
+    + "".join(f'<path d="M{x:.0f},{y:.0f} q12,-4 24,0" stroke="#b4dce6" stroke-width="3" fill="none" opacity="0.5" stroke-linecap="round"/>'
               for x, y in [(12, 100), (70, 150), (130, 112), (190, 146), (220, 104), (40, 132), (160, 128)]))
 
 
