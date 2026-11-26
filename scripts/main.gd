@@ -5,7 +5,7 @@ const LEVELS := [5, 6, 7]
 const LEVEL_LABELS := ["작게 (10,242칸)", "보통 (40,962칸)", "크게 (163,842칸, 느림)"]
 const MODE_LABELS := ["지형", "고도", "기온", "강수량", "판 구조", "기압과 바람", "식생"]
 ## 화면에 표시되는 빌드 이름. PC에서 어떤 버전이 실행 중인지 확인하는 용도.
-const BUILD := "v7.5 굽이치는 강, 물가선 끊김 수정"
+const BUILD := "v7.6 강 하구 (바다·호수로 이어짐, 삼각주, 강물 색 통일)"
 const COMPASS := ["북", "북동", "동", "남동", "남", "남서", "서", "북서"]
 
 var hs := HexSphere.new()
@@ -628,6 +628,20 @@ var _turns: int = 0
 
 ## 스크린샷 점검용 (--find=river|lake|jungle|wetland|boreal|desert|mountain): 그런 칸을 찾아 카메라를 돌린다.
 func _find_and_look(what: String) -> void:
+	if what.begins_with("mouth"):
+		# 바다나 호수로 드는 하구 중 유량이 n 번째로 큰 곳 (mouth, mouth2, mouth3 ...)
+		var mouths: Array = []
+		for f in gen.c_river.size():
+			var dd: int = gen.c_down[f]
+			if gen.c_river[f] == 1 and dd >= 0 and gen.c_river[dd] == 0:
+				mouths.append([gen.c_flow[f], dd])
+		mouths.sort_custom(func(a, b): return a[0] > b[0])
+		var nth: int = maxi(what.trim_prefix("mouth").to_int(), 1) - 1
+		if nth < mouths.size():
+			var d: Vector3 = hs.face_centers[mouths[nth][1]]
+			pitch = -asin(d.y)
+			yaw = atan2(d.x, d.z)
+		return
 	for k in gen.n:
 		var ok := false
 		match what:

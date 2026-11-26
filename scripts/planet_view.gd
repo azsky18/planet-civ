@@ -234,7 +234,9 @@ func _ready() -> void:
 
 	var rmat := StandardMaterial3D.new()
 	rmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	rmat.albedo_color = Color("2a64a8")
+	rmat.vertex_color_use_as_albedo = true
+	rmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	rmat.albedo_color = Color("3f7f9a")
 	rmat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	if _river_tex():
 		# 강물 그림(decal/river)이 있으면 그 그림으로 칠한다
@@ -619,6 +621,7 @@ func _build_rivers() -> void:
 	var lift: float = 0.0016 * maxf(exaggeration, 0.5)
 	var bank := _ArtBuf.new()
 	var ruv := PackedVector2Array()
+	var rcol := PackedColorArray()
 	var tex: bool = _river_tex()
 	# 강물 그림은 위아래 끝이 투명하므로 그만큼 넓혀 그린다
 	var wk: float = 1.3 if tex else 1.0
@@ -637,31 +640,105 @@ func _build_rivers() -> void:
 		if gen.c_river[d] == 1:
 			w1 = hs.spacing * (0.07 + 0.2 * sqrt(gen.c_flow[d] / max_flow))
 		# 갈래가 만나는 꼭짓점은 둥근 이음매(원판)로 메운다
-		var n0: int = pos.size()
 		_disc(pos, idx, pf, pf.normalized(), w0 * 0.5)
-		var n1: int = pos.size()
-		_strip(pos, idx, pts, w0 * wk, w1 * wk)
-		if tex:
-			var seed: int = f
-			for _q in n1 - n0:
-				ruv.append(tile_art.decals.uv("decal/river", 0.0, 0.0, seed))
-			var m: int = pts.size()
-			for k in m:
-				var x: float = lerpf(-0.98, 0.98, float(k) / (m - 1))
-				ruv.append(tile_art.decals.uv("decal/river", x, -0.98, seed))
-				ruv.append(tile_art.decals.uv("decal/river", x, 0.98, seed))
+		_river_pad(ruv, rcol, pos.size(), f, tex)
+		_river_piece(pos, idx, ruv, rcol, pts, w0 * wk, w1 * wk, 1.0, 1.0, f, tex)
 		_bank_strip(bank, pts, w0 * 2.8, w1 * 2.8, -lift * 0.3)
+		if gen.c_river[d] == 0:
+			_river_mouth(pos, idx, ruv, rcol, bank, pts, f, d, w1, wk, lift, gen.c_flow[f] / max_flow, tex)
 	var m := ArrayMesh.new()
 	if pos.size() > 0:
 		var arr: Array = []
 		arr.resize(Mesh.ARRAY_MAX)
 		arr[Mesh.ARRAY_VERTEX] = pos
 		arr[Mesh.ARRAY_INDEX] = idx
+		arr[Mesh.ARRAY_COLOR] = rcol
 		if tex:
 			arr[Mesh.ARRAY_TEX_UV] = ruv
 		m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 	river_mi.mesh = m
 	river_bank_mi.mesh = bank.mesh()
+
+
+## 강 조각 하나: 곡선을 따라 띠를 깔고, 그림 좌표와 투명도(a0 -> a1)를 붙인다.
+func _river_piece(pos: PackedVector3Array, idx: PackedInt32Array, ruv: PackedVector2Array, rcol: PackedColorArray,
+		pts: Array, w0: float, w1: float, a0: float, a1: float, seed: int, tex: bool) -> void:
+	_strip(pos, idx, pts, w0, w1)
+	var m: int = pts.size()
+	for k in m:
+		var t: float = float(k) / (m - 1)
+		var a: float = lerpf(a0, a1, smoothstep(0.5, 1.0, t))
+		rcol.append_array([Color(1, 1, 1, a), Color(1, 1, 1, a)])
+		if tex:
+			var x: float = lerpf(-0.98, 0.98, t)
+			ruv.append(tile_art.decals.uv("decal/river", x, -0.98, seed))
+			ruv.append(tile_art.decals.uv("decal/river", x, 0.98, seed))
+
+
+## 원판처럼 그림 좌표 없이 더한 꼭짓점을 강 한가운데 색으로 채운다.
+func _river_pad(ruv: PackedVector2Array, rcol: PackedColorArray, n: int, seed: int, tex: bool) -> void:
+	while rcol.size() < n:
+		rcol.append(Color.WHITE)
+		if tex:
+			ruv.append(tile_art.decals.uv("decal/river", 0.0, 0.0, seed))
+
+
+## 하구: 강이 끝나는 꼭짓점(d)에서 물 칸 쪽으로 강을 더 끌고 들어가 물빛으로 스며들게 한다.
+## 물가선은 꼭짓점이 아니라 물 칸 쪽으로 구불구불 들어가 있으므로, 꼭짓점에서 멈추면 끊겨 보인다.
+## 큰 강은 여러 갈래로 갈라지는 삼각주를 만들고, 갈래 밑에 흙둑을 넓게 깔아 땅이 바다로 뻗은 모양을 낸다.
+func _river_mouth(pos: PackedVector3Array, idx: PackedInt32Array, ruv: PackedVector2Array, rcol: PackedColorArray,
+		bank: _ArtBuf, pts: Array, f: int, d: int, w: float, wk: float, lift: float, flow: float, tex: bool) -> void:
+	var pd: Vector3 = pts[pts.size() - 1]
+	var up: Vector3 = pd.normalized()
+	var r: float = pd.length()
+	var target := Vector3.ZERO
+	var nw: int = 0
+	for q in 3:
+		var t: int = hs.face_tiles[d * 3 + q]
+		if gen.elevation[t] < 0.0 or gen.is_lake[t] == 1:
+			target += hs.centers[t]
+			nw += 1
+	if nw == 0:
+		return
+	target = (target / nw).normalized() * r
+	var into: Vector3 = target - pd
+	into -= up * into.dot(up)
+	var reach: float = into.length()
+	if reach < 1e-6:
+		return
+	var dw: Vector3 = into / reach
+	var din: Vector3 = (pd - pts[pts.size() - 2])
+	din -= up * din.dot(up)
+	din = din.normalized() if din.length_squared() > 1e-14 else dw
+	var side: Vector3 = dw.cross(up).normalized()
+	var big: bool = flow > 0.3
+	var dirs: Array = [0.0]
+	if big:
+		dirs = [-0.9, 0.0, 0.85] if flow > 0.6 else [-0.65, 0.6]
+	var h: int = hash(Vector2i(d, 77))
+	for bi in dirs.size():
+		var ang: float = dirs[bi] + (float((h >> (bi * 4)) & 15) / 15.0 - 0.5) * 0.3
+		var dirb: Vector3 = dw * cos(ang) + side * sin(ang)
+		var len: float = reach * (1.05 if big else 0.8) * (1.0 - absf(ang) * 0.25)
+		var ctrl: Vector3 = pd + din * len * 0.35
+		var end: Vector3 = pd + dirb * len
+		var bp: Array = []
+		var n: int = 8
+		for k in n + 1:
+			var t: float = float(k) / n
+			var c: Vector3 = _bez3(pd, ctrl, end, t)
+			# 갈래마다 살짝 굽이친다
+			c += side * sin(PI * t) * sin(PI * t * 2.0 + float(bi)) * reach * 0.06
+			bp.append(c.normalized() * r)
+		var wb: float = w * (0.65 if dirs.size() > 1 else 1.0)
+		_disc(pos, idx, pd, up, wb * 0.5)
+		_river_pad(ruv, rcol, pos.size(), d, tex)
+		_river_piece(pos, idx, ruv, rcol, bp, wb * wk, wb * wk * 1.8, 1.0, 0.0, d + bi, tex)
+		if big:
+			# 삼각주 땅: 갈래 밑의 흙둑을 넓게, 끝으로 갈수록 좁게
+			_bank_strip(bank, bp.slice(0, 8), wb * 4.0, wb * 2.6, -lift * 0.3, 0.4)
+		else:
+			_bank_strip(bank, bp.slice(0, 5), w * 2.8, w * 2.4, -lift * 0.3, 0.7)
 
 
 const RIVER_STEPS := 10
@@ -1068,7 +1145,7 @@ func _art_sprite(buf: _ArtBuf, shadow: _ArtBuf, i: int, key: String, x: float, y
 
 
 ## 강줄기 아래 흙둑 띠. 강 곡선을 그대로 따라간다.
-func _bank_strip(buf: _ArtBuf, pts: Array, w0: float, w1: float, lift: float) -> void:
+func _bank_strip(buf: _ArtBuf, pts: Array, w0: float, w1: float, lift: float, fade: float = 0.0) -> void:
 	if not tile_art.decals.has("decal/river_bank"):
 		return
 	var m: int = pts.size()
@@ -1093,7 +1170,11 @@ func _bank_strip(buf: _ArtBuf, pts: Array, w0: float, w1: float, lift: float) ->
 		var x: float = lerpf(-0.98, 0.98, float(k) / (m - 1))
 		buf.pos.append_array([p - side, p + side])
 		buf.nrm.append_array([up, up])
-		buf.col.append_array([Color.WHITE, Color.WHITE])
+		# fade > 0 이면 끝쪽 그만큼을 점점 투명하게 (물속으로 스며드는 삼각주, 하구 둑)
+		var fa: float = 1.0
+		if fade > 0.0:
+			fa = 1.0 - smoothstep(1.0 - fade, 1.0, float(k) / (m - 1))
+		buf.col.append_array([Color(1, 1, 1, fa), Color(1, 1, 1, fa)])
 		buf.uv.append(tile_art.decals.uv("decal/river_bank", x, -0.98, seed))
 		buf.uv.append(tile_art.decals.uv("decal/river_bank", x, 0.98, seed))
 	for k in m - 1:
