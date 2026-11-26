@@ -139,7 +139,15 @@ func rebuild() -> void:
 	var fc: int = hs.face_centers.size()
 	corner_radius.resize(fc)
 	for f in fc:
-		corner_radius[f] = (tile_radius[hs.face_tiles[f * 3]] + tile_radius[hs.face_tiles[f * 3 + 1]] + tile_radius[hs.face_tiles[f * 3 + 2]]) / 3.0
+		var ta: int = hs.face_tiles[f * 3]
+		var tb: int = hs.face_tiles[f * 3 + 1]
+		var tc: int = hs.face_tiles[f * 3 + 2]
+		var sea: int = int(gen.elevation[ta] < 0.0) + int(gen.elevation[tb] < 0.0) + int(gen.elevation[tc] < 0.0)
+		if sea > 0 and sea < 3:
+			# 땅과 바다가 만나는 꼭짓점은 정확히 수면 높이에 둔다 -> 해안선이 칸 경계를 따라간다
+			corner_radius[f] = 1.0
+		else:
+			corner_radius[f] = (tile_radius[ta] + tile_radius[tb] + tile_radius[tc]) / 3.0
 	_build_terrain()
 	_build_lakes()
 	_build_rivers()
@@ -352,36 +360,107 @@ func _edge_mid(i: int, j: int) -> Vector3:
 	return (hs.centers[i] * tile_radius[i] + hs.centers[j] * tile_radius[j]) * 0.5
 
 
+## 방향 dir 이 가리키는 지형 표면 위의 점 (타일 부채꼴 삼각형 평면과의 교점)
+func surface_point(dir: Vector3, hint: int) -> Vector3:
+	var t: int = hs.find_tile(dir, hint)
+	var c: Vector3 = hs.centers[t]
+	var pc: Vector3 = c * tile_radius[t]
+	var off: int = hs.nb_offsets[t]
+	var deg: int = hs.degree(t)
+	for k in deg:
+		var a: Vector3 = corner_pos(off + k)
+		var b: Vector3 = corner_pos(off + (k + 1) % deg)
+		var s1: float = dir.dot(c.cross(a))
+		var s2: float = dir.dot(a.cross(b))
+		var s3: float = dir.dot(b.cross(c))
+		if (s1 >= 0.0 and s2 >= 0.0 and s3 >= 0.0) or (s1 <= 0.0 and s2 <= 0.0 and s3 <= 0.0):
+			var nn: Vector3 = (a - pc).cross(b - pc)
+			var den: float = nn.dot(dir)
+			if absf(den) > 1e-9:
+				return dir * (nn.dot(pc) / den)
+	return dir * tile_radius[t]
+
+
+func _jitter_dir(i: int) -> Vector3:
+	var c: Vector3 = hs.centers[i]
+	var h1: float = _hash01(i * 3 + 1) - 0.5
+	var h2: float = _hash01(i * 7 + 2) - 0.5
+	var en: Array = WorldGen.east_north(c)
+	return (c + ((en[0] as Vector3) * h1 + (en[1] as Vector3) * h2) * hs.spacing * 0.7).normalized()
+
+
+static func _bez(a: Vector3, c: Vector3, b: Vector3, t: float) -> Vector3:
+	var u: float = 1.0 - t
+	return (a * (u * u) + c * (2.0 * u * t) + b * (t * t)).normalized()
+
+
 func _build_rivers() -> void:
 	var pos := PackedVector3Array()
 	var idx := PackedInt32Array()
+	var n: int = hs.count
 	var max_flow: float = 1.0
-	for i in hs.count:
+	var main_up := PackedInt32Array()
+	main_up.resize(n)
+	main_up.fill(-1)
+	for i in n:
+		if gen.is_river[i] == 0:
+			continue
+		max_flow = maxf(max_flow, gen.flow[i])
+		var d: int = gen.downstream[i]
+		if d >= 0 and (main_up[d] < 0 or gen.flow[i] > gen.flow[main_up[d]]):
+			main_up[d] = i
+	var ctrl := {}
+	for i in n:
 		if gen.is_river[i] == 1:
-			max_flow = maxf(max_flow, gen.flow[i])
-	var lift: float = 0.0012 * maxf(exaggeration, 0.5)
-	for i in hs.count:
+			ctrl[i] = _jitter_dir(i)
+	var lift: float = 0.0015 * maxf(exaggeration, 0.5)
+	const SAMPLES := 10
+	for i in n:
 		if gen.is_river[i] == 0:
 			continue
 		var d: int = gen.downstream[i]
 		if d < 0:
 			continue
-		var w: float = hs.spacing * (0.1 + 0.22 * sqrt(gen.flow[i] / max_flow))
-		var ci: Vector3 = hs.centers[i]
-		var cd: Vector3 = hs.centers[d]
-		var p0: Vector3 = ci * tile_radius[i]
-		var pm: Vector3 = _edge_mid(i, d)
-		p0 += ci * lift
-		pm += pm.normalized() * lift
-		_ribbon(pos, idx, p0, pm, w)
-		if gen.elevation[d] < 0.0:
-			# 하구: 수면 아래까지 이어서 바다와 만나게 한다
-			_ribbon(pos, idx, pm, ((pm.normalized() + cd) * 0.5).normalized() * (1.0 - 0.001), w)
-		elif gen.is_lake[d] == 1:
-			_ribbon(pos, idx, pm, ((pm.normalized() + cd) * 0.5).normalized() * lake_level(d), w)
-		else:
-			_ribbon(pos, idx, pm, cd * (tile_radius[d] + lift), w)
-		_disc(pos, idx, p0, ci, w * 0.5)
+		var ci: Vector3 = ctrl[i]
+		var d_water: bool = gen.elevation[d] < 0.0 or gen.is_lake[d] == 1
+		var cd: Vector3 = ctrl[d] if ctrl.has(d) else hs.centers[d]
+		var start: Vector3 = ci
+		if main_up[i] >= 0:
+			start = ((ctrl[main_up[i]] as Vector3) + ci).normalized()
+		var end: Vector3 = (ci + cd).normalized()
+		if d_water:
+			end = (ci * 0.3 + cd * 0.7).normalized()   # 물 안쪽까지 이어서 하구가 끊기지 않게
+		elif main_up[d] != i:
+			# 지류: 본류 곡선의 가운데 점으로 합류
+			var ms: Vector3 = cd
+			if main_up[d] >= 0:
+				ms = ((ctrl[main_up[d]] as Vector3) + cd).normalized()
+			var dd: int = gen.downstream[d]
+			var me: Vector3 = cd
+			if dd >= 0:
+				me = (cd + (ctrl[dd] if ctrl.has(dd) else hs.centers[dd])).normalized()
+			end = _bez(ms, cd, me, 0.5)
+		var w0: float = hs.spacing * (0.08 + 0.2 * sqrt(gen.flow[i] / max_flow))
+		var w1: float = w0
+		if not d_water and gen.is_river[d] == 1:
+			w1 = hs.spacing * (0.08 + 0.2 * sqrt(gen.flow[d] / max_flow))
+		# 평지에서는 조금 더 굽이친다
+		var flat: float = clampf(1.0 - gen.elevation[i] * 4.0, 0.3, 1.0)
+		var amp: float = hs.spacing * 0.14 * flat * (1.0 if _hash01(i + 99) > 0.5 else -1.0)
+		var pts: Array = []
+		for sidx in SAMPLES + 1:
+			var t: float = float(sidx) / SAMPLES
+			var dir: Vector3 = _bez(start, ci, end, t)
+			var tang: Vector3 = _bez(start, ci, end, minf(t + 0.05, 1.0)) - _bez(start, ci, end, maxf(t - 0.05, 0.0))
+			var side: Vector3 = tang.cross(dir).normalized()
+			dir = (dir + side * amp * sin(TAU * t)).normalized()
+			var p: Vector3 = surface_point(dir, i)
+			var r: float = p.length()
+			if d_water and t > 0.5:
+				var wl: float = lake_level(d) if gen.is_lake[d] == 1 else 1.0
+				r = maxf(r, wl) if t < 0.9 else wl - 0.0005
+			pts.append(dir * (r + lift))
+		_strip(pos, idx, pts, w0, w1)
 	var m := ArrayMesh.new()
 	if pos.size() > 0:
 		var arr: Array = []
@@ -390,6 +469,24 @@ func _build_rivers() -> void:
 		arr[Mesh.ARRAY_INDEX] = idx
 		m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 	river_mi.mesh = m
+
+
+func _strip(pos: PackedVector3Array, idx: PackedInt32Array, pts: Array, w0: float, w1: float) -> void:
+	var m: int = pts.size()
+	var base: int = pos.size()
+	for k in m:
+		var p: Vector3 = pts[k]
+		var a: Vector3 = pts[maxi(k - 1, 0)]
+		var b: Vector3 = pts[mini(k + 1, m - 1)]
+		var side: Vector3 = (b - a).cross(p.normalized())
+		if side.length_squared() < 1e-14:
+			side = Vector3.UP.cross(p).normalized()
+		side = side.normalized() * lerpf(w0, w1, float(k) / (m - 1)) * 0.5
+		pos.append(p - side)
+		pos.append(p + side)
+	for k in m - 1:
+		var v: int = base + k * 2
+		idx.append_array([v, v + 1, v + 3, v, v + 3, v + 2])
 
 
 func _ribbon(pos: PackedVector3Array, idx: PackedInt32Array, a: Vector3, b: Vector3, w: float) -> void:

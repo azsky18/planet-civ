@@ -495,10 +495,10 @@ func _make_hydrology() -> void:
 					break
 	# 평탄한 곳에서 강이 자로 그은 듯 곧게 흐르지 않도록 아주 작은 기복을 더한 경로용 고도
 	var route := elevation.duplicate()
-	var rn := _noise(9.0, 2, 51)
+	var rn := _noise(14.0, 3, 51)
 	for i in n:
 		if route[i] >= 0.0:
-			route[i] += (rn.get_noise_3dv(hs.centers[i]) + 1.0) * 0.004
+			route[i] += (rn.get_noise_3dv(hs.centers[i]) + 1.0) * 0.012
 	var order := PackedInt32Array()
 	var eps: float = 1e-5
 	while heap.size() > 0:
