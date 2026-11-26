@@ -1,7 +1,7 @@
 extends SceneTree
 func _init() -> void:
 	var hs := HexSphere.new()
-	hs.build(5)
+	hs.build(6)
 	var g := WorldGen.new()
 	g.seed_value = 1
 	g.generate(hs)

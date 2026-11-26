@@ -1,21 +1,34 @@
 class_name PlanetView
 extends Node3D
-## 행성 메시: 타일마다 육각/오각 기둥(윗면 + 낮은 이웃 쪽 벽), 강 리본, 바람 화살표, 선택 테두리
+## 행성 메시.
+## 각 타일의 꼭짓점은 그 점을 공유하는 세 타일 고도의 평균에 놓인다. 그래서 타일 사이에
+## 단차가 생기지 않고, 고도 차이는 타일이 기울어진 모습으로 나타난다. 산은 따로 모양을
+## 만들지 않고 높은 고도가 모여서 자연스럽게 산맥으로 보인다.
+## 바다는 해저 지형 위에 반투명 수면 구를 덮고, 호수는 평평한 수면을 따로 그린다.
 
 enum Mode { BIOME, ELEVATION, TEMPERATURE, PRECIP, PLATES, WIND }
 
+const LAND_SCALE := 0.07     # 고도 1.0 (약 7,500m) 일 때 반지름 증가량
+const SEA_SCALE := 0.025     # 수심 쪽은 덜 과장
+const LAND_BASE := 0.0025    # 해안선이 수면 위로 올라오도록 하는 최소 높이
+const SEA_BASE := 0.004
+
 var hs: HexSphere
 var gen: WorldGen
-var exaggeration: float = 1.0
+var exaggeration: float = 1.8
 var mode: int = Mode.BIOME
 
-var tile_radius := PackedFloat32Array()
+var tile_radius := PackedFloat32Array()     # 타일 가운데 반지름
+var corner_radius := PackedFloat32Array()   # 꼭짓점(면) 반지름
 var _arrays: Array = []
 var _vert_tile := PackedInt32Array()
 var _vert_shade := PackedFloat32Array()
 
 var terrain_mi := MeshInstance3D.new()
+var water_mi := MeshInstance3D.new()
+var lake_mi := MeshInstance3D.new()
 var river_mi := MeshInstance3D.new()
+var grid_mi := MeshInstance3D.new()
 var wind_mi := MeshInstance3D.new()
 var hover_mi := MeshInstance3D.new()
 var atmo_mi := MeshInstance3D.new()
@@ -25,24 +38,52 @@ var terrain_mesh := ArrayMesh.new()
 func _ready() -> void:
 	var mat := StandardMaterial3D.new()
 	mat.vertex_color_use_as_albedo = true
-	mat.roughness = 0.92
-	mat.metallic_specular = 0.15
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.roughness = 0.95
+	mat.metallic_specular = 0.1
 	terrain_mi.material_override = mat
 	terrain_mi.mesh = terrain_mesh
 	add_child(terrain_mi)
 
+	var wmat := StandardMaterial3D.new()
+	wmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	wmat.albedo_color = Color(0.08, 0.2, 0.36, 0.84)
+	wmat.roughness = 0.55
+	wmat.metallic_specular = 0.25
+	var ws := SphereMesh.new()
+	ws.radius = 1.0
+	ws.height = 2.0
+	ws.radial_segments = 256
+	ws.rings = 128
+	water_mi.mesh = ws
+	water_mi.material_override = wmat
+	add_child(water_mi)
+
+	var lmat := StandardMaterial3D.new()
+	lmat.albedo_color = Color("4f93b3")
+	lmat.roughness = 0.3
+	lmat.metallic_specular = 0.6
+	lmat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	lake_mi.material_override = lmat
+	add_child(lake_mi)
+
 	var rmat := StandardMaterial3D.new()
 	rmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	rmat.albedo_color = Color("2e6b9c")
+	rmat.albedo_color = Color("2a64a8")
 	rmat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	river_mi.material_override = rmat
 	add_child(river_mi)
 
-	var wmat := StandardMaterial3D.new()
-	wmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	wmat.vertex_color_use_as_albedo = true
-	wind_mi.material_override = wmat
+	var gmat := StandardMaterial3D.new()
+	gmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	gmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	gmat.albedo_color = Color(0.12, 0.09, 0.05, 0.13)
+	grid_mi.material_override = gmat
+	add_child(grid_mi)
+
+	var amat := StandardMaterial3D.new()
+	amat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	amat.vertex_color_use_as_albedo = true
+	wind_mi.material_override = amat
 	wind_mi.visible = false
 	add_child(wind_mi)
 
@@ -74,98 +115,91 @@ void fragment() {
 	add_child(atmo_mi)
 
 
+func _land_r(e: float) -> float:
+	return 1.0 + LAND_BASE + e * LAND_SCALE * exaggeration
+
+
 func radius_for(i: int) -> float:
-	var e: float = gen.elevation[i]
 	if gen.is_lake[i] == 1:
-		e = gen.filled[i]
-	if e <= 0.0:
-		return 1.0
-	return 1.0 + e * 0.045 * exaggeration + 0.0015
+		return _land_r(gen.filled[i]) - 0.0015   # 호수 바닥은 수면보다 약간 아래
+	var e: float = gen.elevation[i]
+	if e >= 0.0:
+		return _land_r(e)
+	return 1.0 - SEA_BASE + e * SEA_SCALE * maxf(exaggeration, 0.3)
 
 
-## 칸 가운데의 실제 표면 높이 (구릉/산지는 봉우리 높이)
-func surface_radius(i: int) -> float:
-	var rel: int = gen.relief[i]
-	if rel == 0:
-		return tile_radius[i]
-	return tile_radius[i] + (0.012 if rel == 2 else 0.0038) * maxf(exaggeration, 0.2)
+func lake_level(i: int) -> float:
+	return _land_r(gen.filled[i]) + 0.0004
 
 
 func rebuild() -> void:
 	tile_radius.resize(hs.count)
 	for i in hs.count:
 		tile_radius[i] = radius_for(i)
+	var fc: int = hs.face_centers.size()
+	corner_radius.resize(fc)
+	for f in fc:
+		corner_radius[f] = (tile_radius[hs.face_tiles[f * 3]] + tile_radius[hs.face_tiles[f * 3 + 1]] + tile_radius[hs.face_tiles[f * 3 + 2]]) / 3.0
 	_build_terrain()
+	_build_lakes()
 	_build_rivers()
+	_build_grid()
 	_build_wind()
 	set_hover(-1)
 
 
+func corner_pos(k: int) -> Vector3:
+	var f: int = hs.corner_face[k]
+	return hs.face_centers[f] * corner_radius[f]
+
+
 func _build_terrain() -> void:
-	var pos := PackedVector3Array()
-	var nrm := PackedVector3Array()
-	_vert_tile = PackedInt32Array()
-	_vert_shade = PackedFloat32Array()
-	var idx := PackedInt32Array()
+	var fc: int = hs.face_centers.size()
+	# 공유 정점 기준으로 부드러운 법선 계산
+	var n_center := PackedVector3Array()
+	n_center.resize(hs.count)
+	var n_face := PackedVector3Array()
+	n_face.resize(fc)
 	for i in hs.count:
 		var c: Vector3 = hs.centers[i]
-		var r: float = tile_radius[i]
+		var pc: Vector3 = c * tile_radius[i]
+		var off: int = hs.nb_offsets[i]
+		var deg: int = hs.degree(i)
+		for k in deg:
+			var ka: int = off + k
+			var kb: int = off + (k + 1) % deg
+			var pa: Vector3 = corner_pos(ka)
+			var pb: Vector3 = corner_pos(kb)
+			var tn: Vector3 = (pa - pc).cross(pb - pc)
+			if tn.dot(c) < 0.0:
+				tn = -tn
+			n_center[i] += tn
+			n_face[hs.corner_face[ka]] += tn
+			n_face[hs.corner_face[kb]] += tn
+
+	var pos := PackedVector3Array()
+	var nrm := PackedVector3Array()
+	var idx := PackedInt32Array()
+	_vert_tile = PackedInt32Array()
+	_vert_shade = PackedFloat32Array()
+	for i in hs.count:
+		var c: Vector3 = hs.centers[i]
 		var off: int = hs.nb_offsets[i]
 		var deg: int = hs.degree(i)
 		var base: int = pos.size()
-		pos.append(c * r)
-		nrm.append(c)
+		pos.append(c * tile_radius[i])
+		nrm.append(n_center[i].normalized())
 		_vert_tile.append(i)
 		_vert_shade.append(1.0)
 		for k in deg:
-			pos.append(hs.corner_list[off + k] * r)
-			nrm.append(c)
+			pos.append(corner_pos(off + k))
+			nrm.append(n_face[hs.corner_face[off + k]].normalized())
 			_vert_tile.append(i)
-			_vert_shade.append(0.97)
-		var rel: int = gen.relief[i]
-		if rel == 0:
-			for k in deg:
-				idx.append(base)
-				idx.append(base + 1 + (k + 1) % deg)
-				idx.append(base + 1 + k)
-		else:
-			# 산지와 구릉은 가운데를 솟게 해서 각진 봉우리로 보이게 한다
-			var peak: Vector3 = c * surface_radius(i)
-			pos[base] = peak
-			for k in deg:
-				var a: Vector3 = hs.corner_list[off + k] * r
-				var b: Vector3 = hs.corner_list[off + (k + 1) % deg] * r
-				var fn: Vector3 = (b - peak).cross(a - peak).normalized()
-				if fn.dot(c) < 0.0:
-					fn = -fn
-				var v0: int = pos.size()
-				pos.append_array([peak, b, a])
-				nrm.append_array([fn, fn, fn])
-				_vert_tile.append_array([i, i, i])
-				_vert_shade.append_array([1.08 if rel == 2 else 1.0, 0.95, 0.95])
-				idx.append_array([v0, v0 + 1, v0 + 2])
-		# 낮은 이웃 쪽으로 벽
+			_vert_shade.append(1.0)
 		for k in deg:
-			var j: int = hs.nb_list[off + k]
-			var rj: float = tile_radius[j]
-			if rj >= r - 1e-6:
-				continue
-			var a: Vector3 = hs.corner_list[off + k]
-			var b: Vector3 = hs.corner_list[off + (k + 1) % deg]
-			var wn: Vector3 = ((a + b) * 0.5 - c).normalized()
-			var w0: int = pos.size()
-			pos.append(a * r)
-			pos.append(b * r)
-			pos.append(b * rj)
-			pos.append(a * rj)
-			for _q in 4:
-				nrm.append(wn)
-				_vert_tile.append(i)
-			_vert_shade.append(0.82)
-			_vert_shade.append(0.82)
-			_vert_shade.append(0.62)
-			_vert_shade.append(0.62)
-			idx.append_array([w0, w0 + 1, w0 + 2, w0, w0 + 2, w0 + 3])
+			idx.append(base)
+			idx.append(base + 1 + (k + 1) % deg)
+			idx.append(base + 1 + k)
 	_arrays = []
 	_arrays.resize(Mesh.ARRAY_MAX)
 	_arrays[Mesh.ARRAY_VERTEX] = pos
@@ -188,6 +222,9 @@ func recolor() -> void:
 	_arrays[Mesh.ARRAY_COLOR] = cols
 	terrain_mesh.clear_surfaces()
 	terrain_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _arrays)
+	# 수면은 지형/고도 보기에서만 덮는다
+	water_mi.visible = mode == Mode.BIOME or mode == Mode.ELEVATION
+	lake_mi.visible = water_mi.visible
 
 
 func _hash01(i: int) -> float:
@@ -199,16 +236,22 @@ func _hash01(i: int) -> float:
 func tile_color(i: int) -> Color:
 	match mode:
 		Mode.BIOME:
-			var col: Color = WorldGen.BIOME_COLORS[gen.biome[i]]
-			var j: float = (_hash01(i) - 0.5) * 0.06
-			if gen.elevation[i] >= 0.0 and gen.is_lake[i] == 0:
-				if gen.relief[i] == 2 and gen.biome[i] != WorldGen.B.SNOW_PEAK and gen.biome[i] != WorldGen.B.ICE:
-					col = col.lerp(Color("8c806b"), 0.45)
-				elif gen.relief[i] == 1:
-					col = col.darkened(0.06)
-			else:
-				j = 0.0
-				col = col.lerp(Color("0f2236"), clampf(-gen.elevation[i] - 0.5, 0.0, 0.5))
+			var b: int = gen.biome[i]
+			var col: Color = WorldGen.BIOME_COLORS[b]
+			var e: float = gen.elevation[i]
+			if e < 0.0 and gen.is_lake[i] == 0:
+				# 해저: 얕으면 모래빛, 깊을수록 어둡게 (수면을 통해 비쳐 보인다)
+				if b == WorldGen.B.SEA_ICE:
+					return col
+				return Color("6fa0a0").lerp(Color("0e1d2e"), clampf(-e * 1.6, 0.0, 1.0))
+			if gen.relief[i] == 2:
+				col = col.lerp(WorldGen.ROCK_COLOR, 0.5)
+				var tt: float = gen.temperature[i]
+				if tt < -4.0:
+					col = col.lerp(WorldGen.SNOWCAP_COLOR, clampf((-4.0 - tt) / 6.0, 0.35, 0.9))
+			elif gen.relief[i] == 1:
+				col = col.lerp(WorldGen.ROCK_COLOR, 0.12)
+			var j: float = (_hash01(i) - 0.5) * 0.04
 			return Color(col.r + j, col.g + j, col.b + j)
 		Mode.ELEVATION:
 			return elevation_color(gen.height_m(i))
@@ -268,6 +311,47 @@ static func _ramp(stops: Array, v: float) -> Color:
 	return stops[stops.size() - 1][1]
 
 
+func _build_lakes() -> void:
+	var pos := PackedVector3Array()
+	var nrm := PackedVector3Array()
+	var idx := PackedInt32Array()
+	for i in hs.count:
+		if gen.is_lake[i] == 0:
+			continue
+		var c: Vector3 = hs.centers[i]
+		var r: float = lake_level(i)
+		var off: int = hs.nb_offsets[i]
+		var deg: int = hs.degree(i)
+		var base: int = pos.size()
+		pos.append(c * r)
+		nrm.append(c)
+		for k in deg:
+			# 이웃 호수 쪽으로는 살짝 넓혀 틈을 없앤다
+			pos.append((c + (hs.corner_list[off + k] - c) * 1.04).normalized() * r)
+			nrm.append(c)
+		for k in deg:
+			idx.append_array([base, base + 1 + (k + 1) % deg, base + 1 + k])
+	var m := ArrayMesh.new()
+	if pos.size() > 0:
+		var arr: Array = []
+		arr.resize(Mesh.ARRAY_MAX)
+		arr[Mesh.ARRAY_VERTEX] = pos
+		arr[Mesh.ARRAY_NORMAL] = nrm
+		arr[Mesh.ARRAY_INDEX] = idx
+		m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	lake_mi.mesh = m
+
+
+## 타일 i 에서 이웃 j 쪽 변의 가운데 점 (지형 표면 위)
+func _edge_mid(i: int, j: int) -> Vector3:
+	var off: int = hs.nb_offsets[i]
+	var deg: int = hs.degree(i)
+	for k in deg:
+		if hs.nb_list[off + k] == j:
+			return (corner_pos(off + k) + corner_pos(off + (k + 1) % deg)) * 0.5
+	return (hs.centers[i] * tile_radius[i] + hs.centers[j] * tile_radius[j]) * 0.5
+
+
 func _build_rivers() -> void:
 	var pos := PackedVector3Array()
 	var idx := PackedInt32Array()
@@ -275,30 +359,29 @@ func _build_rivers() -> void:
 	for i in hs.count:
 		if gen.is_river[i] == 1:
 			max_flow = maxf(max_flow, gen.flow[i])
+	var lift: float = 0.0012 * maxf(exaggeration, 0.5)
 	for i in hs.count:
 		if gen.is_river[i] == 0:
 			continue
 		var d: int = gen.downstream[i]
 		if d < 0:
 			continue
-		var w: float = hs.spacing * (0.05 + 0.16 * sqrt(gen.flow[i] / max_flow))
+		var w: float = hs.spacing * (0.1 + 0.22 * sqrt(gen.flow[i] / max_flow))
 		var ci: Vector3 = hs.centers[i]
 		var cd: Vector3 = hs.centers[d]
-		var mid: Vector3 = ((ci + cd) * 0.5).normalized()
-		var lift: float = 0.0015
-		var si: float = surface_radius(i) + lift
-		var ri: float = tile_radius[i] + lift
-		var rd: float = tile_radius[d] + lift
-		var sd: float = surface_radius(d) + lift
-		_ribbon(pos, idx, ci * si, mid * ri, w)
-		if absf(ri - rd) > 1e-5:
-			_ribbon(pos, idx, mid * ri, mid * rd, w)
-		if gen.is_water(d):
-			_ribbon(pos, idx, mid * rd, ((mid + cd) * 0.5).normalized() * rd, w)
+		var p0: Vector3 = ci * tile_radius[i]
+		var pm: Vector3 = _edge_mid(i, d)
+		p0 += ci * lift
+		pm += pm.normalized() * lift
+		_ribbon(pos, idx, p0, pm, w)
+		if gen.elevation[d] < 0.0:
+			# 하구: 수면 아래까지 이어서 바다와 만나게 한다
+			_ribbon(pos, idx, pm, ((pm.normalized() + cd) * 0.5).normalized() * (1.0 - 0.001), w)
+		elif gen.is_lake[d] == 1:
+			_ribbon(pos, idx, pm, ((pm.normalized() + cd) * 0.5).normalized() * lake_level(d), w)
 		else:
-			_ribbon(pos, idx, mid * rd, cd * sd, w)
-		# 이음매를 메우는 작은 원판
-		_disc(pos, idx, ci * si, ci, w * 0.5)
+			_ribbon(pos, idx, pm, cd * (tile_radius[d] + lift), w)
+		_disc(pos, idx, p0, ci, w * 0.5)
 	var m := ArrayMesh.new()
 	if pos.size() > 0:
 		var arr: Array = []
@@ -316,7 +399,7 @@ func _ribbon(pos: PackedVector3Array, idx: PackedInt32Array, a: Vector3, b: Vect
 	var up: Vector3 = ((a + b) * 0.5).normalized()
 	var side: Vector3 = dir.cross(up)
 	if side.length_squared() < 1e-12:
-		side = up.cross(Vector3.UP if absf(up.y) < 0.9 else Vector3.RIGHT)
+		return
 	side = side.normalized() * w * 0.5
 	var s: int = pos.size()
 	pos.append_array([a - side, a + side, b + side, b - side])
@@ -335,6 +418,34 @@ func _disc(pos: PackedVector3Array, idx: PackedInt32Array, c: Vector3, nrm: Vect
 		idx.append_array([s, s + 1 + k, s + 1 + (k + 1) % 6])
 
 
+## 타일 경계선. 육지 위에만 그린다.
+func _build_grid() -> void:
+	var pos := PackedVector3Array()
+	var lift: float = 0.0006
+	for i in hs.count:
+		var off: int = hs.nb_offsets[i]
+		var deg: int = hs.degree(i)
+		var land_i: bool = gen.elevation[i] >= 0.0 and gen.is_lake[i] == 0
+		for k in deg:
+			var j: int = hs.nb_list[off + k]
+			if j < i:
+				continue
+			var land_j: bool = gen.elevation[j] >= 0.0 and gen.is_lake[j] == 0
+			if not (land_i or land_j):
+				continue
+			var a: Vector3 = corner_pos(off + k)
+			var b: Vector3 = corner_pos(off + (k + 1) % deg)
+			pos.append(a + a.normalized() * lift)
+			pos.append(b + b.normalized() * lift)
+	var m := ArrayMesh.new()
+	if pos.size() > 0:
+		var arr: Array = []
+		arr.resize(Mesh.ARRAY_MAX)
+		arr[Mesh.ARRAY_VERTEX] = pos
+		m.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, arr)
+	grid_mi.mesh = m
+
+
 func _build_wind() -> void:
 	var pos := PackedVector3Array()
 	var cols := PackedColorArray()
@@ -345,7 +456,7 @@ func _build_wind() -> void:
 		var spd: float = w.length()
 		if spd < 0.05:
 			continue
-		var c: Vector3 = hs.centers[i] * (surface_radius(i) + 0.004)
+		var c: Vector3 = hs.centers[i] * (maxf(tile_radius[i], 1.0) + 0.006)
 		var dirv: Vector3 = w.normalized()
 		var tip: Vector3 = c + dirv * len * (0.4 + 0.6 * spd)
 		var side: Vector3 = dirv.cross(hs.centers[i]).normalized() * len * 0.18
@@ -372,8 +483,9 @@ func set_hover(i: int) -> void:
 	im.surface_begin(Mesh.PRIMITIVE_LINE_STRIP)
 	var off: int = hs.nb_offsets[i]
 	var deg: int = hs.degree(i)
-	var r: float = tile_radius[i] + 0.002
 	for k in deg + 1:
-		im.surface_add_vertex(hs.corner_list[off + k % deg] * r)
+		var p: Vector3 = corner_pos(off + k % deg)
+		p = p.normalized() * maxf(p.length(), 1.0)
+		im.surface_add_vertex(p + p.normalized() * 0.0015)
 	im.surface_end()
 	hover_mi.mesh = im

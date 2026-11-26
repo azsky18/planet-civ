@@ -2,23 +2,25 @@ class_name WorldGen
 extends RefCounted
 ## 행성 생성기: 판 구조 -> 고도 -> 기온 -> 기압과 바람(코리올리) -> 수분 이동과 강수 -> 강, 호수, 습지 -> 생물군계
 
+## 게임용으로 단순화한 지형 12종. 산과 구릉은 지형이 아니라 기복(relief)으로 따로 둔다.
 enum B {
-	DEEP_OCEAN, OCEAN, SHALLOW, SEA_ICE, LAKE,
-	ICE, TUNDRA, TAIGA, COLD_STEPPE, STEPPE, TEMPERATE_FOREST, TEMPERATE_RAINFOREST,
-	DESERT, SHRUBLAND, SAVANNA, TROPICAL_SEASONAL, RAINFOREST, MARSH, ALPINE, SNOW_PEAK
+	DEEP_OCEAN, OCEAN, SEA_ICE, LAKE,
+	GRASSLAND, PLAINS, DESERT, TUNDRA, SNOW, FOREST, JUNGLE, MARSH
 }
 
 const BIOME_NAMES := [
-	"깊은 바다", "바다", "얕은 바다", "해빙", "호수",
-	"빙원", "툰드라", "냉대림 (타이가)", "냉대 초원", "온대 초원 (스텝)", "온대림", "온대 우림",
-	"사막", "관목지", "사바나", "열대 계절림", "열대 우림", "습지", "고산", "만년설"
+	"대양", "연안", "해빙", "호수",
+	"초원", "평원", "사막", "툰드라", "설원", "숲", "밀림", "습지"
 ]
 
 const BIOME_COLORS := [
-	Color("1b324d"), Color("24476a"), Color("3a7189"), Color("d9e3e6"), Color("5fa3bf"),
-	Color("eef1ef"), Color("8f9479"), Color("435a3c"), Color("9d9a70"), Color("aaa35f"), Color("56743a"), Color("3a5c3c"),
-	Color("d5bd86"), Color("b4a26b"), Color("b8a557"), Color("6f8c37"), Color("2f5a2b"), Color("5c7a5c"), Color("8a8173"), Color("f4f2ec")
+	Color("1d3a5a"), Color("3d7a92"), Color("d9e3e6"), Color("5fa3bf"),
+	Color("6f9a43"), Color("b3a65f"), Color("d8c08a"), Color("8f9479"), Color("eef1ef"), Color("3f6332"), Color("2b5228"), Color("5c7a5c")
 ]
+
+## 산이 높고 추우면 눈, 아니면 바위 색으로 칠한다 (보기 전용)
+const ROCK_COLOR := Color("8c806b")
+const SNOWCAP_COLOR := Color("f2f2ee")
 
 const LAND_HEIGHT_M := 7500.0
 const SEA_DEPTH_M := 7000.0
@@ -243,7 +245,7 @@ func _make_elevation() -> void:
 					v = (0.6 if pi > pj else -0.4) * conv  # 호상 열도
 			else:
 				var mag: float = -conv
-				v = (-0.3 if ci else 0.22) * mag   # 열곡 / 해령
+				v = (-0.15 if ci else 0.22) * mag   # 열곡 / 해령
 			v += 0.08 * shear
 			acc += v
 			conv_sum += conv
@@ -407,6 +409,7 @@ func _make_precip() -> void:
 	uplift.resize(n)
 	var w_pull := PackedFloat32Array()
 	w_pull.resize(hs.nb_list.size())
+	var lvl_k: float = pow(2.0, hs.level - 5)
 	for i in n:
 		var water: bool = elevation[i] < 0.0
 		src[i] = clampf((temperature[i] + 8.0) / 30.0, 0.25, 1.0) if water else -1.0
@@ -429,8 +432,9 @@ func _make_precip() -> void:
 			w_pull[k] /= sum
 		var hi: float = maxf(elevation[i], 0.0)
 		var hu: float = up_h / up_w if up_w > 0.0 else hi
-		uplift[i] = clampf((hi - hu) * 6.0, 0.0, 1.0)
-		loss[i] = 0.04 + 0.45 * uplift[i] + 0.15 * clampf(hi - 0.35, 0.0, 1.0)
+		# 격자가 촘촘해져도 거리당 효과가 같도록 칸 크기로 보정 (기준: 10,242칸)
+		uplift[i] = clampf((hi - hu) * 6.0 * lvl_k, 0.0, 1.0)
+		loss[i] = (0.04 + 0.45 * uplift[i] + 0.15 * clampf(hi - 0.35, 0.0, 1.0)) / lvl_k
 
 	var iters: int = int(60 * pow(2.0, hs.level - 5))
 	for _it in iters:
@@ -524,7 +528,7 @@ func _make_hydrology() -> void:
 	for i in order:
 		land_flows.append(flow[i])
 	land_flows.sort()
-	var q: float = clampf(1.0 - 0.1 * river_amount, 0.5, 0.995)
+	var q: float = clampf(1.0 - 0.09 * river_amount, 0.5, 0.995)
 	river_threshold = land_flows[int(q * (land_flows.size() - 1))] if land_flows.size() > 0 else 1e9
 	river_threshold = maxf(river_threshold, 1500.0)
 
@@ -560,6 +564,48 @@ func _make_hydrology() -> void:
 		if is_lake[i] == 0 and flow[i] >= river_threshold:
 			is_river[i] = 1
 
+	# 강 정리: 하구(바다나 호수)까지 이어진 수계 단위로 보고, 본류가 짧은 수계는 지운다
+	var chain := PackedInt32Array()     # 그 칸까지 이어진 가장 긴 상류 길이
+	chain.resize(n)
+	for idx in range(order.size() - 1, -1, -1):
+		var i: int = order[idx]
+		if is_river[i] == 0:
+			continue
+		chain[i] = maxi(chain[i], 1)
+		var d: int = downstream[i]
+		if d >= 0 and is_river[d] == 1:
+			chain[d] = maxi(chain[d], chain[i] + 1)
+	var mouth := PackedInt32Array()
+	mouth.resize(n)
+	mouth.fill(-1)
+	for i in order:   # 하류부터: 하류 칸의 하구를 물려받는다
+		if is_river[i] == 0:
+			continue
+		var d: int = downstream[i]
+		if d >= 0 and is_river[d] == 1:
+			mouth[i] = mouth[d]
+		elif d >= 0 and (elevation[d] < 0.0 or is_lake[d] == 1):
+			mouth[i] = i
+		else:
+			mouth[i] = -1   # 물에 닿지 못하는 강
+	var min_len: int = maxi(3, int(round(5.0 * pow(2.0, hs.level - 6))))
+	for i in order:
+		if is_river[i] == 1 and (mouth[i] < 0 or chain[mouth[i]] < min_len):
+			is_river[i] = 0
+	# 본류에 붙은 한두 칸짜리 짧은 지류도 지운다
+	var spur: int = maxi(1, min_len / 3)
+	for i in order:
+		if is_river[i] == 1 and chain[i] <= spur:
+			var d: int = downstream[i]
+			if d >= 0 and is_river[d] == 1 and chain[d] > chain[i] + 1:
+				is_river[i] = 0
+	# 하류가 끊긴 조각 제거 (하류부터 확인)
+	for i in order:
+		if is_river[i] == 1:
+			var d: int = downstream[i]
+			if d < 0 or (is_river[d] == 0 and elevation[d] >= 0.0 and is_lake[d] == 0):
+				is_river[i] = 0
+
 	# 습지: 평탄한 저지대 + 많은 물 (큰 강 하구, 다습 저지, 한대 소택지)
 	var mn := _noise(4.5, 2, 41)
 	for i in order:
@@ -579,14 +625,14 @@ func _make_hydrology() -> void:
 				near_lake = true
 			else:
 				rough = maxf(rough, absf(elevation[j] - h))
-		if rough > 0.025:
+		if rough > 0.025 * pow(2.0, 5 - hs.level):
 			continue
 		var wet: float = precip[i] / 1000.0 + (flow[i] / river_threshold) * (0.35 if coast else 0.12)
 		if near_lake:
 			wet += 0.4
 		if temperature[i] < 4.0 and temperature[i] > -8.0:
 			wet += 0.5   # 영구동토 위 소택지
-		if wet + mn.get_noise_3dv(hs.centers[i]) * 0.6 > 1.75:
+		if wet + mn.get_noise_3dv(hs.centers[i]) * 0.6 > 1.9:
 			is_marsh[i] = 1
 
 
@@ -621,45 +667,28 @@ func _make_biomes() -> void:
 		if e < 0.0:
 			if t < -9.0:
 				biome[i] = B.SEA_ICE
-			elif e > -0.12:
-				biome[i] = B.SHALLOW
-			elif e > -0.45:
+			elif e > -0.15:
 				biome[i] = B.OCEAN
 			else:
 				biome[i] = B.DEEP_OCEAN
 			continue
-		var hm: float = height_m(i)
 		var b: int
-		if t < -12.0:
-			b = B.ICE
-		elif hm > 3200.0:
-			b = B.SNOW_PEAK if t < -4.0 else B.ALPINE
+		if t < -10.0:
+			b = B.SNOW
 		elif is_marsh[i] == 1:
 			b = B.MARSH
-		elif t < -3.0:
+		elif t < 0.0:
 			b = B.TUNDRA
-		elif t < 5.0:
-			b = B.COLD_STEPPE if p < 260.0 else B.TAIGA
-		elif t < 19.0:
-			if p < 250.0:
-				b = B.DESERT
-			elif p < 550.0:
-				b = B.STEPPE
-			elif p < 1800.0:
-				b = B.TEMPERATE_FOREST
-			else:
-				b = B.TEMPERATE_RAINFOREST
+		elif p < 250.0:
+			b = B.DESERT
+		elif p < 520.0:
+			b = B.PLAINS
+		elif t >= 20.0 and p >= 2000.0:
+			b = B.JUNGLE
+		elif p >= 950.0 or t < 6.0:
+			b = B.FOREST
 		else:
-			if p < 300.0:
-				b = B.DESERT
-			elif p < 650.0:
-				b = B.SHRUBLAND
-			elif p < 1300.0:
-				b = B.SAVANNA
-			elif p < 2100.0:
-				b = B.TROPICAL_SEASONAL
-			else:
-				b = B.RAINFOREST
+			b = B.GRASSLAND
 		biome[i] = b
 
 

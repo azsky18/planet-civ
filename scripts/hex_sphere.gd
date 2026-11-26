@@ -14,6 +14,12 @@ var centers := PackedVector3Array()
 var nb_offsets := PackedInt32Array()
 var nb_list := PackedInt32Array()
 var corner_list := PackedVector3Array()
+## corner_list 와 같은 인덱스: 그 모서리(꼭짓점)가 해당하는 삼각형 면 번호.
+## 같은 면 번호를 가진 모서리는 세 타일이 공유하는 같은 점이다.
+var corner_face := PackedInt32Array()
+## 면(꼭짓점) 위치와, 그 꼭짓점을 공유하는 세 타일
+var face_centers := PackedVector3Array()
+var face_tiles := PackedInt32Array()
 ## 이웃 타일 사이 평균 각거리 (라디안)
 var spacing: float = 0.0
 
@@ -75,9 +81,12 @@ func build(subdiv: int) -> void:
 		vf[b].append(f)
 		vf[c].append(f)
 
+	face_centers = face_center
+	face_tiles = faces
 	nb_offsets.resize(count + 1)
 	nb_list = PackedInt32Array()
 	corner_list = PackedVector3Array()
+	corner_face = PackedInt32Array()
 	var total_sp: float = 0.0
 	var total_n: int = 0
 	for v in count:
@@ -99,6 +108,7 @@ func build(subdiv: int) -> void:
 			var f0: int = arr[k][1]
 			var f1: int = arr[(k + 1) % m][1]
 			corner_list.append(face_center[f0])
+			corner_face.append(f0)
 			var shared: int = -1
 			for s in 3:
 				var cand: int = faces[f0 * 3 + s]

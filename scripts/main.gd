@@ -1,8 +1,8 @@
 extends Node3D
 ## 행성 지도 프로토타입: 장면 구성, 카메라 조작, UI
 
-const LEVELS := [4, 5, 6]
-const LEVEL_LABELS := ["작게 (2,562칸)", "보통 (10,242칸)", "크게 (40,962칸, 느림)"]
+const LEVELS := [5, 6, 7]
+const LEVEL_LABELS := ["작게 (10,242칸)", "보통 (40,962칸)", "크게 (163,842칸, 느림)"]
 const MODE_LABELS := ["지형", "고도", "기온", "강수량", "판 구조", "기압과 바람"]
 const COMPASS := ["북", "북동", "동", "남동", "남", "남서", "서", "북서"]
 
@@ -38,6 +38,7 @@ var mode_opt := OptionButton.new()
 var river_chk := CheckBox.new()
 var wind_chk := CheckBox.new()
 var atmo_chk := CheckBox.new()
+var grid_chk := CheckBox.new()
 var status_lbl := Label.new()
 var info_lbl := RichTextLabel.new()
 var legend_box := VBoxContainer.new()
@@ -67,6 +68,10 @@ func _ready() -> void:
 		elif a.begins_with("--seed="):
 			seed_edit.text = a.substr(7)
 			_regenerate()
+		elif a.begins_with("--exag="):
+			exag_slider.value = float(a.substr(7))
+			view.exaggeration = exag_slider.value
+			view.rebuild()
 		elif a.begins_with("--size="):
 			size_opt.select(int(a.substr(7)))
 			_regenerate()
@@ -260,7 +265,7 @@ func _setup_ui() -> void:
 		mode_opt.add_item(MODE_LABELS[k], k)
 	mode_opt.item_selected.connect(_on_mode)
 	lv.add_child(_row("보기", mode_opt))
-	_setup_slider(lv, exag_slider, "고도 과장", 0.0, 3.0, 0.1, 1.0, func(v): return "×%.1f" % v)
+	_setup_slider(lv, exag_slider, "고도 과장", 0.0, 4.0, 0.1, 1.8, func(v): return "×%.1f" % v)
 	exag_slider.drag_ended.connect(func(_c):
 		view.exaggeration = exag_slider.value
 		if current_level >= 0:
@@ -275,11 +280,15 @@ func _setup_ui() -> void:
 	atmo_chk.text = "대기"
 	atmo_chk.button_pressed = true
 	atmo_chk.toggled.connect(func(on): view.atmo_mi.visible = on)
+	grid_chk.text = "격자"
+	grid_chk.button_pressed = true
+	grid_chk.toggled.connect(func(on): view.grid_mi.visible = on)
 	var chk_row := HBoxContainer.new()
 	chk_row.add_child(river_chk)
-	chk_row.add_child(wind_chk)
+	chk_row.add_child(grid_chk)
 	chk_row.add_child(atmo_chk)
 	lv.add_child(chk_row)
+	lv.add_child(wind_chk)
 
 	lv.add_child(HSeparator.new())
 	lv.add_child(legend_box)
@@ -363,11 +372,11 @@ func _update_legend() -> void:
 		PlanetView.Mode.BIOME:
 			var counts: PackedInt32Array = gen.stats.get("counts", PackedInt32Array())
 			for b in WorldGen.BIOME_NAMES.size():
-				if b in [WorldGen.B.DEEP_OCEAN, WorldGen.B.OCEAN]:
-					continue
 				if counts.size() > b and counts[b] == 0:
 					continue
 				items.append([WorldGen.BIOME_COLORS[b], WorldGen.BIOME_NAMES[b]])
+			items.append([WorldGen.BIOME_COLORS[WorldGen.B.GRASSLAND].lerp(WorldGen.ROCK_COLOR, 0.5), "산 (기복)"])
+			items.append([WorldGen.SNOWCAP_COLOR, "눈 덮인 산"])
 		PlanetView.Mode.ELEVATION:
 			for h in [-4000, 0, 500, 1500, 3000, 5000]:
 				items.append([PlanetView.elevation_color(h), "%s m" % _num(h)])
@@ -488,9 +497,9 @@ func _unhandled_input(event: InputEvent) -> void:
 					selected = -1 if selected == hover else hover
 					_update_info()
 		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_UP:
-			dist_target = clampf(dist_target - (dist_target - 1.0) * 0.15, 1.12, 8.0)
+			dist_target = clampf(dist_target - (dist_target - 1.0) * 0.15, 1.06, 8.0)
 		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			dist_target = clampf(dist_target + (dist_target - 1.0) * 0.15, 1.12, 8.0)
+			dist_target = clampf(dist_target + (dist_target - 1.0) * 0.15, 1.06, 8.0)
 	elif event is InputEventMouseMotion:
 		var mm := event as InputEventMouseMotion
 		if dragging:

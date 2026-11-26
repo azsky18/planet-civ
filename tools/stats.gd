@@ -1,7 +1,7 @@
 extends SceneTree
 func _init() -> void:
 	var hs := HexSphere.new()
-	hs.build(5)
+	hs.build(6)
 	for sd in [1, 2, 3]:
 		var g := WorldGen.new()
 		g.seed_value = sd
@@ -10,7 +10,7 @@ func _init() -> void:
 		var land: int = g.stats["land"]
 		var out := "seed %d land %d rivers %d lakes %d marsh %d | " % [sd, land, g.stats["rivers"], g.stats["lakes"], g.stats["marsh"]]
 		for b in c.size():
-			if b >= 5 and c[b] > 0:
+			if b >= 4 and c[b] > 0:
 				out += "%s %d%%, " % [WorldGen.BIOME_NAMES[b], int(100.0 * c[b] / land)]
 		var lp := 0.0
 		for i in hs.count:
