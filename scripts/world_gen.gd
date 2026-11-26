@@ -2,20 +2,23 @@ class_name WorldGen
 extends RefCounted
 ## 행성 생성기: 판 구조 -> 고도 -> 기온 -> 기압과 바람(코리올리) -> 수분 이동과 강수 -> 강, 호수, 습지 -> 생물군계
 
-## 게임용으로 단순화한 지형 12종. 산과 구릉은 지형이 아니라 기복(relief)으로 따로 둔다.
+## 표시용 지형 이름. 저장하는 값이 아니라 타일 레이어(1층 지형·기후 + 2층 식생)를
+## 조합해서 만든다 (TileLayers.display_biome). 산과 구릉은 기복(relief)으로 따로 둔다.
+## BARE 는 사막이 아닌 곳의 맨땅 (벌목하거나 시설이 사라진 뒤).
 enum B {
 	DEEP_OCEAN, OCEAN, SEA_ICE, LAKE,
-	GRASSLAND, PLAINS, DESERT, TUNDRA, SNOW, FOREST, JUNGLE, MARSH
+	GRASSLAND, PLAINS, DESERT, TUNDRA, SNOW, FOREST, JUNGLE, MARSH, BARE
 }
 
 const BIOME_NAMES := [
 	"대양", "연안", "해빙", "호수",
-	"초원", "평원", "사막", "툰드라", "설원", "숲", "밀림", "습지"
+	"초원", "평원", "사막", "툰드라", "설원", "숲", "밀림", "습지", "맨땅"
 ]
 
 const BIOME_COLORS := [
 	Color("1d3a5a"), Color("3d7a92"), Color("d9e3e6"), Color("5fa3bf"),
-	Color("6f9a43"), Color("b3a65f"), Color("d8c08a"), Color("8f9479"), Color("eef1ef"), Color("3f6332"), Color("2b5228"), Color("5c7a5c")
+	Color("6f9a43"), Color("b3a65f"), Color("d8c08a"), Color("8f9479"), Color("eef1ef"), Color("3f6332"), Color("2b5228"), Color("5c7a5c"),
+	Color("9c8466")
 ]
 
 ## 산이 높고 추우면 눈, 아니면 바위 색으로 칠한다 (보기 전용)
@@ -61,8 +64,24 @@ var c_river := PackedByteArray()
 var c_threshold: float = 0.0
 var is_lake := PackedByteArray()
 var is_marsh := PackedByteArray()
-var biome := PackedInt32Array()
+var biome := PackedInt32Array()          # 표시용 (TileLayers.display_biome 결과)
 var relief := PackedByteArray()          # 0 평지, 1 구릉, 2 산지
+
+# 타일 레이어 (규칙은 TileLayers)
+# 1층 지형·기후: 생성 때 정해지고 바뀌지 않는다. 기복은 relief, 강은 river_mask.
+var base := PackedByteArray()            # TileLayers.Base
+var temp_band := PackedByteArray()       # TileLayers.TempBand
+var moist := PackedByteArray()           # TileLayers.Moist
+# 2층 식생
+var potential_veg := PackedByteArray()   # 사람이 없을 때 자리잡는 식생
+var veg := PackedByteArray()             # 지금 식생 (TileLayers.Veg)
+var veg_age := PackedInt32Array()        # 지금 식생이 된 지 몇 턴
+# 3층 시설물
+var structure := PackedByteArray()       # TileLayers.Struct
+var structure_state := PackedByteArray() # TileLayers.State
+var idle_turns := PackedInt32Array()     # 시설을 마지막으로 쓴 지 몇 턴
+var road := PackedByteArray()            # 1 이면 도로 (주 시설과 따로)
+var irrigated := PackedByteArray()       # 1 이면 관개됨 (관개수로가 있는 칸)
 var river_threshold: float = 0.0
 var stats := {}
 
@@ -745,39 +764,55 @@ func _make_biomes() -> void:
 			relief[i] = 2
 		elif hm > 650.0 or rng_m > 300.0:
 			relief[i] = 1
+	_make_layers()
+	for i in n:
+		biome[i] = TileLayers.display_biome(self, i)
+
+
+## 1층 지형·기후와 2층 잠재 식생을 정하고, 시작 식생은 잠재 식생과 같게 둔다.
+func _make_layers() -> void:
+	for arr in [base, temp_band, moist, potential_veg, veg, structure, structure_state, road, irrigated]:
+		arr.resize(n)
+		arr.fill(0)
+	for arr in [veg_age, idle_turns]:
+		arr.resize(n)
+		arr.fill(0)
 	for i in n:
 		var t: float = temperature[i]
 		var p: float = precip[i]
 		var e: float = elevation[i]
+		temp_band[i] = TileLayers.temp_band_of(t)
+		moist[i] = TileLayers.moist_of(p)
+		var v: int
 		if is_lake[i] == 1:
-			biome[i] = B.LAKE if t > -10.0 else B.SEA_ICE
-			continue
-		if e < 0.0:
-			if t < -9.0:
-				biome[i] = B.SEA_ICE
-			elif e > -0.15:
-				biome[i] = B.OCEAN
-			else:
-				biome[i] = B.DEEP_OCEAN
-			continue
-		var b: int
-		if t < -10.0:
-			b = B.SNOW
-		elif is_marsh[i] == 1:
-			b = B.MARSH
-		elif t < 0.0:
-			b = B.TUNDRA
-		elif p < 250.0:
-			b = B.DESERT
-		elif p < 520.0:
-			b = B.PLAINS
-		elif t >= 20.0 and p >= 2000.0:
-			b = B.JUNGLE
-		elif p >= 950.0 or t < 6.0:
-			b = B.FOREST
+			base[i] = TileLayers.Base.LAKE
+			v = TileLayers.Veg.ICE if t <= -10.0 else TileLayers.Veg.NONE
+		elif e < 0.0:
+			base[i] = TileLayers.Base.SHALLOW if e > -0.15 else TileLayers.Base.DEEP
+			v = TileLayers.Veg.ICE if t < -9.0 else TileLayers.Veg.NONE
 		else:
-			b = B.GRASSLAND
-		biome[i] = b
+			base[i] = TileLayers.Base.LAND
+			if t < -10.0:
+				v = TileLayers.Veg.ICE
+			elif is_marsh[i] == 1:
+				v = TileLayers.Veg.WETLAND
+			elif t < 0.0:
+				v = TileLayers.Veg.GRASS
+			elif p < 250.0:
+				v = TileLayers.Veg.BARE
+			elif p < 520.0:
+				v = TileLayers.Veg.GRASS
+			elif p >= 950.0 or t < 6.0:
+				v = TileLayers.Veg.FOREST
+			else:
+				v = TileLayers.Veg.GRASS
+		potential_veg[i] = v
+		veg[i] = v
+
+
+## 식생이나 시설이 바뀐 뒤 표시 지형을 다시 계산한다.
+func refresh_biome(i: int) -> void:
+	biome[i] = TileLayers.display_biome(self, i)
 
 
 func _make_stats() -> void:
