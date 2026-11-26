@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 256 256" width="256" height="256">
+<!-- 밀림: 짙은 활엽수와 야자 -->
+<defs>
+<g id="j"><ellipse cx="4" cy="1" rx="17" ry="5" fill="#0e1806" opacity="0.4"/><rect x="-2" y="-12" width="4" height="13" fill="#4a3018"/>
+<path d="M0,-44 C-14,-44 -22,-34 -20,-24 C-26,-18 -22,-6 -12,-7 C-6,-2 6,-2 10,-7 C20,-4 26,-14 21,-22 C25,-32 16,-42 6,-40 C4,-43 2,-44 0,-44 Z" fill="#2c5a22" stroke="#0f2a10" stroke-width="1.2"/>
+<path d="M-14,-28 C-12,-36 -2,-40 4,-37 C-3,-33 -9,-28 -9,-21 Z" fill="#6f9c3c" opacity="0.55"/></g>
+<g id="p"><ellipse cx="3" cy="1" rx="10" ry="3" fill="#0e1806" opacity="0.4"/>
+<path d="M-1,0 Q-3,-20 2,-38 L4,-38 Q0,-20 2,0 Z" fill="#6a4a26"/>
+<g fill="#3f7a2a" stroke="#173a12" stroke-width="1"><path d="M3,-38 Q-10,-46 -22,-36 Q-10,-40 3,-36 Z"/><path d="M3,-38 Q16,-46 26,-34 Q14,-40 3,-36 Z"/><path d="M3,-38 Q-6,-30 -14,-22 Q-4,-32 3,-36 Z"/><path d="M3,-38 Q12,-30 18,-20 Q8,-32 3,-36 Z"/><path d="M3,-38 Q2,-50 10,-54 Q4,-46 4,-38 Z"/></g></g></defs>
+<use xlink:href="#j" transform="translate(100,80)"/>
+<use xlink:href="#j" transform="translate(156,82)"/>
+<use xlink:href="#p" transform="translate(128,82)"/>
+<use xlink:href="#j" transform="translate(128,112)"/>
+<use xlink:href="#p" transform="translate(156,118)"/>
+<use xlink:href="#j" transform="translate(74,120)"/>
+<use xlink:href="#p" transform="translate(102,120)"/>
+<use xlink:href="#j" transform="translate(182,122)"/>
+<use xlink:href="#j" transform="translate(156,150)"/>
+<use xlink:href="#j" transform="translate(102,154)"/>
+<use xlink:href="#p" transform="translate(128,156)"/>
+<use xlink:href="#p" transform="translate(72,156)"/>
+<use xlink:href="#p" transform="translate(186,156)"/>
+<use xlink:href="#j" transform="translate(182,188)"/>
+<use xlink:href="#j" transform="translate(76,190)"/>
+<use xlink:href="#j" transform="translate(130,198)"/>
+<use xlink:href="#p" transform="translate(104,198)"/>
+<use xlink:href="#p" transform="translate(154,206)"/>
+</svg>

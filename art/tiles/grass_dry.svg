@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 256 256" width="256" height="256">
+<!-- 초지 (건조·반건조, 평원): 마른 풀 -->
+<defs><g id="t"><ellipse cx="2" cy="1" rx="8" ry="2.5" fill="#3a3010" opacity="0.25"/><g stroke-width="2" stroke-linecap="round" fill="none"><path d="M0,0 Q-4,-6 -9,-9" stroke="#a89a4a"/><path d="M1,0 Q1,-8 0,-13" stroke="#c8b45c"/><path d="M2,0 Q6,-6 10,-8" stroke="#9a8a40"/></g></g>
+<g id="b"><ellipse cx="2" cy="2" rx="9" ry="3" fill="#3a3010" opacity="0.3"/><circle cx="0" cy="-4" r="7" fill="#8a8a44" stroke="#5a5a2a" stroke-width="1"/><circle cx="-2" cy="-6" r="3" fill="#b0ae60"/></g></defs>
+<use xlink:href="#t" transform="translate(150,64)"/>
+<use xlink:href="#t" transform="translate(96,66)"/>
+<use xlink:href="#t" transform="translate(124,96)"/>
+<use xlink:href="#t" transform="translate(178,100)"/>
+<use xlink:href="#t" transform="translate(70,104)"/>
+<use xlink:href="#b" transform="translate(124,124)"/>
+<use xlink:href="#t" transform="translate(156,130)"/>
+<use xlink:href="#t" transform="translate(98,136)"/>
+<use xlink:href="#t" transform="translate(186,150)"/>
+<use xlink:href="#t" transform="translate(66,160)"/>
+<use xlink:href="#t" transform="translate(128,168)"/>
+<use xlink:href="#b" transform="translate(178,176)"/>
+<use xlink:href="#b" transform="translate(80,186)"/>
+<use xlink:href="#t" transform="translate(96,198)"/>
+<use xlink:href="#t" transform="translate(158,198)"/>
+</svg>
