@@ -211,8 +211,7 @@ void fragment() {
 		m.metallic_specular = 0.05
 		m.render_priority = prio
 		prio += 1
-		if mi != river_bank_mi and mi != art_shore_mi:
-			m.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA
+		m.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA
 		mi.material_override = m
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
