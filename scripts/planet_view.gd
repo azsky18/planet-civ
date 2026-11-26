@@ -336,6 +336,7 @@ func lake_level(i: int) -> float:
 
 
 func rebuild() -> void:
+	_pick_rmax = -1.0
 	tile_radius.resize(hs.count)
 	for i in hs.count:
 		tile_radius[i] = radius_for(i)
@@ -593,6 +594,59 @@ func surface_point(dir: Vector3, hint: int) -> Vector3:
 			if absf(den) > 1e-9:
 				return dir * (nn.dot(pc) / den)
 	return dir * tile_radius[t]
+
+
+var _pick_rmax: float = -1.0
+
+
+## 화면 광선이 실제 지형(고도 반영)과 처음 만나는 점의 타일. 없으면 -1.
+## 바깥 껍질에서 시작해 조금씩 나아가다 지면 아래로 들어가면 이분 탐색으로 좁힌다.
+## 물 아래 칸은 수면(반지름 1.0)에서 멈춘다.
+func pick_tile(o: Vector3, d: Vector3, hint: int) -> int:
+	if tile_radius.is_empty():
+		return -1
+	if _pick_rmax < 0.0:
+		_pick_rmax = 1.0
+		for r in tile_radius:
+			_pick_rmax = maxf(_pick_rmax, r)
+		for r in corner_radius:
+			_pick_rmax = maxf(_pick_rmax, r)
+		_pick_rmax += 0.001
+	d = d.normalized()
+	var b: float = o.dot(d)
+	var c: float = o.dot(o) - _pick_rmax * _pick_rmax
+	var disc: float = b * b - c
+	if disc < 0.0:
+		return -1
+	var t0: float = maxf(-b - sqrt(disc), 0.0)
+	var t1: float = -b + sqrt(disc)
+	var step: float = maxf(hs.spacing * 0.25, 1e-4)
+	var h: int = maxi(hint, 0)
+	var prev: float = t0
+	var t: float = t0
+	var n: int = 0
+	while t <= t1 and n < 2000:
+		var p: Vector3 = o + d * t
+		var dir: Vector3 = p.normalized()
+		h = hs.find_tile(dir, h)
+		var rs: float = maxf(surface_point(dir, h).length(), 1.0)
+		if p.length() <= rs:
+			var lo: float = prev
+			var hi: float = t
+			for _k in 14:
+				var m: float = (lo + hi) * 0.5
+				var pm: Vector3 = o + d * m
+				var dm: Vector3 = pm.normalized()
+				h = hs.find_tile(dm, h)
+				if pm.length() <= maxf(surface_point(dm, h).length(), 1.0):
+					hi = m
+				else:
+					lo = m
+			return hs.find_tile((o + d * hi).normalized(), h)
+		prev = t
+		t += step
+		n += 1
+	return -1
 
 
 func _face_pos(f: int) -> Vector3:

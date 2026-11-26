@@ -5,7 +5,7 @@ const LEVELS := [5, 6, 7]
 const LEVEL_LABELS := ["작게 (10,242칸)", "보통 (40,962칸)", "크게 (163,842칸, 느림)"]
 const MODE_LABELS := ["지형", "고도", "기온", "강수량", "판 구조", "기압과 바람", "식생"]
 ## 화면에 표시되는 빌드 이름. PC에서 어떤 버전이 실행 중인지 확인하는 용도.
-const BUILD := "v7.7 강 하구 다듬기 (물이 하구까지 파고듦, 땅 쪽 삼각주, 진한 격자)"
+const BUILD := "v7.8 높은 칸 클릭 위치 어긋남 수정"
 const COMPASS := ["북", "북동", "동", "남동", "남", "남서", "서", "북서"]
 
 var hs := HexSphere.new()
@@ -724,15 +724,8 @@ func _pick(mp: Vector2) -> void:
 		return
 	var o: Vector3 = cam.project_ray_origin(mp)
 	var d: Vector3 = cam.project_ray_normal(mp)
-	# 반지름 1.0 구와 교차
-	var b: float = o.dot(d)
-	var c: float = o.dot(o) - 1.0
-	var disc: float = b * b - c
-	var t: int = -1
-	if disc >= 0.0:
-		var s: float = -b - sqrt(disc)
-		var p: Vector3 = (o + d * s).normalized()
-		t = hs.find_tile(p, maxi(hover, 0))
+	# 고도가 반영된 실제 지형과 교차해야 높은 칸에서도 마우스 아래 칸이 잡힌다
+	var t: int = view.pick_tile(o, d, hover)
 	if t != hover:
 		hover = t
 		view.set_hover(selected if selected >= 0 else hover)
