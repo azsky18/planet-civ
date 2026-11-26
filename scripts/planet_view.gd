@@ -96,8 +96,13 @@ void fragment() {
 	vec3 tw = pow(abs(normalize(onrm)), vec3(4.0));
 	tw /= (tw.x + tw.y + tw.z);
 	vec3 p = opos * tex_scale;
-	vec3 nv = vec3(nz(p * 0.35, tw), nz(p * 0.35 + vec3(3.7, 1.3, 5.1), tw), nz(p * 0.35 + vec3(7.1, 4.9, 2.3), tw));
-	vec3 w = clamp(bw + (nv - 0.5) * 0.55, 0.0, 1.0);
+	// 경계 흔들기 노이즈는 칸의 순서(x,y,z)가 아니라 그 칸의 바닥 그림 번호로 고른다.
+	// 이웃 삼각형에서는 같은 칸이 다른 자리에 오기 때문에, 자리로 고르면 삼각형 경계에서 물가선이 어긋난다.
+	vec3 nv = vec3(nz(p * 0.35 + lay.x * vec3(0.37, 0.13, 0.51), tw),
+		nz(p * 0.35 + lay.y * vec3(0.37, 0.13, 0.51), tw),
+		nz(p * 0.35 + lay.z * vec3(0.37, 0.13, 0.51), tw));
+	// 이 삼각형에 없는 칸(무게 0, 즉 이웃 삼각형과 맞닿은 변)은 흔들지 않아 양쪽이 똑같이 이어진다.
+	vec3 w = clamp(bw + (nv - 0.5) * 0.55 * clamp(bw * 4.0, 0.0, 1.0), 0.0, 1.0);
 	w = pow(w, vec3(5.0));
 	w /= (w.x + w.y + w.z + 1e-6);
 	vec3 isw = vec3(step(water_start - 0.5, lay.x), step(water_start - 0.5, lay.y), step(water_start - 0.5, lay.z));
@@ -595,7 +600,7 @@ static func _bez3(a: Vector3, c: Vector3, b: Vector3, t: float) -> Vector3:
 	return a * (u * u) + c * (2.0 * u * t) + b * (t * t)
 
 
-## 경계 강: 해안선처럼 칸의 변을 따라 각지게 그린다.
+## 경계 강: 칸의 변(꼭짓점에서 꼭짓점)을 따라 흐르되, 그리는 선은 부드럽게 굽이친다.
 func _build_rivers() -> void:
 	var pos := PackedVector3Array()
 	var idx := PackedInt32Array()
@@ -623,18 +628,15 @@ func _build_rivers() -> void:
 		var d: int = gen.c_down[f]
 		if d < 0:
 			continue
-		# 칸의 변을 그대로 따라가는 각진 직선. 이음매가 비지 않도록 양 끝을 폭의 절반만큼 늘린다.
-		var pf: Vector3 = _face_pos(f)
-		var pd: Vector3 = _face_pos(d)
-		pf = pf.normalized() * (maxf(pf.length(), 1.0) + lift)
-		pd = pd.normalized() * (maxf(pd.length(), 1.0) + lift)
+		# 칸의 변을 따라 흐르되, 위아래 물줄기와 부드럽게 이어지는 곡선에 불규칙한 굽이를 더한다.
+		# 굽이는 양 끝(꼭짓점)에서 0 이고 기울기도 0 이라 이웃 구간과 어긋나지 않는다.
+		var pts: Array = _river_curve(f, d, main_up, lift)
+		var pf: Vector3 = pts[0]
 		var w0: float = hs.spacing * (0.07 + 0.2 * sqrt(gen.c_flow[f] / max_flow))
 		var w1: float = w0
 		if gen.c_river[d] == 1:
 			w1 = hs.spacing * (0.07 + 0.2 * sqrt(gen.c_flow[d] / max_flow))
-		var dirv: Vector3 = (pd - pf).normalized()
-		var pts: Array = [pf, pd]
-		# 꺾이는 꼭짓점은 둥근 이음매(원판)로 메워 모서리가 튀어나오지 않게 한다
+		# 갈래가 만나는 꼭짓점은 둥근 이음매(원판)로 메운다
 		var n0: int = pos.size()
 		_disc(pos, idx, pf, pf.normalized(), w0 * 0.5)
 		var n1: int = pos.size()
@@ -643,9 +645,12 @@ func _build_rivers() -> void:
 			var seed: int = f
 			for _q in n1 - n0:
 				ruv.append(tile_art.decals.uv("decal/river", 0.0, 0.0, seed))
-			ruv.append_array([tile_art.decals.uv("decal/river", -0.98, -0.98, seed), tile_art.decals.uv("decal/river", -0.98, 0.98, seed),
-				tile_art.decals.uv("decal/river", 0.98, -0.98, seed), tile_art.decals.uv("decal/river", 0.98, 0.98, seed)])
-		_bank_strip(bank, pf, pd, w0 * 2.8, w1 * 2.8, -lift * 0.3)
+			var m: int = pts.size()
+			for k in m:
+				var x: float = lerpf(-0.98, 0.98, float(k) / (m - 1))
+				ruv.append(tile_art.decals.uv("decal/river", x, -0.98, seed))
+				ruv.append(tile_art.decals.uv("decal/river", x, 0.98, seed))
+		_bank_strip(bank, pts, w0 * 2.8, w1 * 2.8, -lift * 0.3)
 	var m := ArrayMesh.new()
 	if pos.size() > 0:
 		var arr: Array = []
@@ -657,6 +662,48 @@ func _build_rivers() -> void:
 		m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 	river_mi.mesh = m
 	river_bank_mi.mesh = bank.mesh()
+
+
+const RIVER_STEPS := 10
+
+## f 꼭짓점에서 d 꼭짓점까지의 강 곡선. 위쪽 본류와 아래쪽 물줄기를 함께 보고
+## Catmull-Rom 으로 이어 꺾임을 없애고, 구간마다 정해진 굽이를 옆으로 더한다.
+func _river_curve(f: int, d: int, main_up: PackedInt32Array, lift: float) -> Array:
+	var pf: Vector3 = _face_pos(f)
+	var pd: Vector3 = _face_pos(d)
+	var rf: float = maxf(pf.length(), 1.0) + lift
+	var rd: float = maxf(pd.length(), 1.0) + lift
+	var u: int = main_up[f]
+	var p0: Vector3 = _face_pos(u) if u >= 0 else pf * 2.0 - pd
+	var dd: int = gen.c_down[d] if gen.c_river[d] == 1 else -1
+	var p3: Vector3 = _face_pos(dd) if dd >= 0 else pd * 2.0 - pf
+	var up: Vector3 = (pf + pd).normalized()
+	var side: Vector3 = (pd - pf).cross(up)
+	if side.length_squared() > 1e-14:
+		side = side.normalized()
+	var h: int = hash(Vector2i(f, d))
+	var s1: float = float(h & 1023) / 511.5 - 1.0
+	var s2: float = float((h >> 10) & 1023) / 511.5 - 1.0
+	var amp: float = hs.spacing * 0.16
+	var pts: Array = []
+	for k in RIVER_STEPS + 1:
+		var t: float = float(k) / RIVER_STEPS
+		var c: Vector3 = _catmull(p0, pf, pd, p3, t)
+		var env: float = sin(PI * t)
+		env *= env
+		c += side * amp * env * (s1 * 0.8 + s2 * 0.9 * cos(PI * t))
+		pts.append(c.normalized() * lerpf(rf, rd, t))
+	return pts
+
+
+static func _catmull(p0: Vector3, p1: Vector3, p2: Vector3, p3: Vector3, t: float) -> Vector3:
+	# 구간 길이가 크게 다를 때 튀지 않도록 바깥 점을 이 구간 길이로 맞춘다
+	var l: float = p1.distance_to(p2)
+	var a: Vector3 = p1 + (p0 - p1).normalized() * l if (p0 - p1).length_squared() > 1e-14 else p1 * 2.0 - p2
+	var b: Vector3 = p2 + (p3 - p2).normalized() * l if (p3 - p2).length_squared() > 1e-14 else p2 * 2.0 - p1
+	var t2: float = t * t
+	var t3: float = t2 * t
+	return 0.5 * ((2.0 * p1) + (-a + p2) * t + (2.0 * a - 5.0 * p1 + 4.0 * p2 - b) * t2 + (-a + 3.0 * p1 - 3.0 * p2 + b) * t3)
 
 
 func _river_tex() -> bool:
@@ -1020,28 +1067,39 @@ func _art_sprite(buf: _ArtBuf, shadow: _ArtBuf, i: int, key: String, x: float, y
 		shadow.tri(sb, sb + 3, sb + 2)
 
 
-## 강줄기 아래 흙둑 띠
-func _bank_strip(buf: _ArtBuf, a: Vector3, b: Vector3, w0: float, w1: float, lift: float) -> void:
+## 강줄기 아래 흙둑 띠. 강 곡선을 그대로 따라간다.
+func _bank_strip(buf: _ArtBuf, pts: Array, w0: float, w1: float, lift: float) -> void:
 	if not tile_art.decals.has("decal/river_bank"):
 		return
-	var up: Vector3 = ((a + b) * 0.5).normalized()
-	var side: Vector3 = (b - a).cross(up)
-	if side.length_squared() < 1e-14:
-		return
-	side = side.normalized()
-	var ext: Vector3 = (b - a).normalized() * w0 * 0.25
-	var pa: Vector3 = a - ext + a.normalized() * lift
-	var pb: Vector3 = b + ext + b.normalized() * lift
+	var m: int = pts.size()
+	var ext: Vector3 = (pts[1] - pts[0]).normalized() * w0 * 0.25
+	var ext2: Vector3 = (pts[m - 1] - pts[m - 2]).normalized() * w1 * 0.25
+	var seed: int = int(pts[0].x * 1e5)
 	var base: int = buf.pos.size()
-	var pts: Array = [pa - side * w0 * 0.5, pa + side * w0 * 0.5, pb + side * w1 * 0.5, pb - side * w1 * 0.5]
-	var uvs: Array = [Vector2(-0.98, -0.98), Vector2(-0.98, 0.98), Vector2(0.98, 0.98), Vector2(0.98, -0.98)]
-	for q in 4:
-		buf.pos.append(pts[q])
-		buf.nrm.append(up)
-		buf.col.append(Color.WHITE)
-		buf.uv.append(tile_art.decals.uv("decal/river_bank", uvs[q].x, uvs[q].y, int(a.x * 1e5)))
-	buf.tri(base, base + 2, base + 1)
-	buf.tri(base, base + 3, base + 2)
+	for k in m:
+		var p: Vector3 = pts[k]
+		if k == 0:
+			p -= ext
+		elif k == m - 1:
+			p += ext2
+		var a: Vector3 = pts[maxi(k - 1, 0)]
+		var b: Vector3 = pts[mini(k + 1, m - 1)]
+		var up: Vector3 = p.normalized()
+		var side: Vector3 = (b - a).cross(up)
+		if side.length_squared() < 1e-14:
+			return
+		side = side.normalized() * lerpf(w0, w1, float(k) / (m - 1)) * 0.5
+		p += up * lift
+		var x: float = lerpf(-0.98, 0.98, float(k) / (m - 1))
+		buf.pos.append_array([p - side, p + side])
+		buf.nrm.append_array([up, up])
+		buf.col.append_array([Color.WHITE, Color.WHITE])
+		buf.uv.append(tile_art.decals.uv("decal/river_bank", x, -0.98, seed))
+		buf.uv.append(tile_art.decals.uv("decal/river_bank", x, 0.98, seed))
+	for k in m - 1:
+		var v: int = base + k * 2
+		buf.tri(v, v + 1, v + 3)
+		buf.tri(v, v + 3, v + 2)
 
 
 func _art_roads(buf: _ArtBuf, i: int) -> void:
