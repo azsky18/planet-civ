@@ -1,5 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
-<!-- 경계: 얕은 바다 칸에 깊은 바다가 번져 듦 (art/tools/gen_placeholders.py 로 생성한 임시 그림) -->
-<defs><linearGradient id="f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#14324e" stop-opacity="0.75"/><stop offset="1" stop-color="#14324e" stop-opacity="0"/></linearGradient></defs>
-<rect width="256" height="150" fill="url(#f)"/>
-</svg>
