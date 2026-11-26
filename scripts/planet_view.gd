@@ -96,8 +96,13 @@ void fragment() {
 	vec3 tw = pow(abs(normalize(onrm)), vec3(4.0));
 	tw /= (tw.x + tw.y + tw.z);
 	vec3 p = opos * tex_scale;
-	vec3 nv = vec3(nz(p * 0.35, tw), nz(p * 0.35 + vec3(3.7, 1.3, 5.1), tw), nz(p * 0.35 + vec3(7.1, 4.9, 2.3), tw));
-	vec3 w = clamp(bw + (nv - 0.5) * 0.55, 0.0, 1.0);
+	// 경계 흔들기 노이즈는 칸의 순서(x,y,z)가 아니라 그 칸의 바닥 그림 번호로 고른다.
+	// 이웃 삼각형에서는 같은 칸이 다른 자리에 오기 때문에, 자리로 고르면 삼각형 경계에서 물가선이 어긋난다.
+	vec3 nv = vec3(nz(p * 0.35 + lay.x * vec3(0.37, 0.13, 0.51), tw),
+		nz(p * 0.35 + lay.y * vec3(0.37, 0.13, 0.51), tw),
+		nz(p * 0.35 + lay.z * vec3(0.37, 0.13, 0.51), tw));
+	// 이 삼각형에 없는 칸(무게 0, 즉 이웃 삼각형과 맞닿은 변)은 흔들지 않아 양쪽이 똑같이 이어진다.
+	vec3 w = clamp(bw + (nv - 0.5) * 0.55 * clamp(bw * 4.0, 0.0, 1.0), 0.0, 1.0);
 	w = pow(w, vec3(5.0));
 	w /= (w.x + w.y + w.z + 1e-6);
 	vec3 isw = vec3(step(water_start - 0.5, lay.x), step(water_start - 0.5, lay.y), step(water_start - 0.5, lay.z));
