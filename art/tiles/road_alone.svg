@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 256 256" width="256" height="256">
+<!-- 도로 (이웃과 이어지지 않은 외딴 도로 칸) -->
+<path d="M96,128 L160,128 M128,100 L128,156" stroke="#6e5434" stroke-width="18" stroke-linecap="round"/>
+<path d="M96,128 L160,128 M128,100 L128,156" stroke="#c4a372" stroke-width="12" stroke-linecap="round"/>
+<circle cx="128" cy="128" r="10" fill="#c4a372" stroke="#6e5434" stroke-width="3"/>
+</svg>

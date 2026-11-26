@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 256 256" width="256" height="256">
+<!-- 습지: 물웅덩이, 부들, 갈대 -->
+<defs><linearGradient id="pool" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6a8e8a"/><stop offset="1" stop-color="#3e625e"/></linearGradient>
+<g id="r"><g stroke="#5a6a2a" stroke-width="2" stroke-linecap="round" fill="none"><path d="M0,0 Q-2,-14 -6,-24"/><path d="M3,0 Q4,-16 2,-30"/><path d="M6,0 Q9,-12 14,-20"/><path d="M-3,0 Q-7,-8 -13,-12"/></g><rect x="0.5" y="-34" width="3.5" height="10" rx="1.7" fill="#6a4220"/><rect x="-9" y="-28" width="3" height="8" rx="1.5" fill="#6a4220"/></g></defs>
+<g stroke="#2e4a3e" stroke-width="1.5" fill="url(#pool)">
+<path d="M58,98 C68,82 112,80 124,92 C134,104 106,118 80,116 C62,114 52,108 58,98 Z"/>
+<path d="M128,134 C142,122 184,124 188,140 C192,154 158,162 138,156 C124,152 120,142 128,134 Z"/>
+<path d="M72,164 C80,156 104,158 106,168 C108,178 86,182 76,178 C68,174 66,170 72,164 Z"/>
+<path d="M150,70 C156,64 176,66 178,74 C180,82 160,84 154,80 C148,78 146,74 150,70 Z"/></g>
+<g fill="none" stroke="#a9c6c0" stroke-width="1.5" stroke-linecap="round" opacity="0.8"><path d="M74,94 L94,92"/><path d="M144,136 L166,135"/><path d="M80,166 L92,165"/></g>
+<use xlink:href="#r" transform="translate(164,82)"/>
+<use xlink:href="#r" transform="translate(126,98)"/>
+<use xlink:href="#r" transform="translate(56,104)"/>
+<use xlink:href="#r" transform="translate(186,110)"/>
+<use xlink:href="#r" transform="translate(88,134)"/>
+<use xlink:href="#r" transform="translate(186,146)"/>
+<use xlink:href="#r" transform="translate(120,150)"/>
+<use xlink:href="#r" transform="translate(150,178)"/>
+<use xlink:href="#r" transform="translate(108,180)"/>
+</svg>

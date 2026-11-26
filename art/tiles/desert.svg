@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 256 256" width="256" height="256">
+<!-- 사막 (건조한 맨땅): 모래 언덕과 선인장 같은 덤불 -->
+<defs><g id="d"><path d="M-30,0 C-18,-14 -4,-18 8,-12 C16,-8 24,-4 30,0 Z" fill="#e2c88a"/><path d="M8,-12 C16,-8 24,-4 30,0 L-2,0 C2,-4 6,-8 8,-12 Z" fill="#c4a464"/><path d="M-30,0 L30,0" stroke="#a88a50" stroke-width="1.2"/></g>
+<g id="s"><ellipse cx="2" cy="1" rx="6" ry="2" fill="#3a2e10" opacity="0.3"/><g stroke="#6a7a3a" stroke-width="2" stroke-linecap="round" fill="none"><path d="M0,0 L-4,-7 M0,0 L0,-9 M0,0 L5,-6"/></g></g></defs>
+<use xlink:href="#s" transform="translate(130,80)"/>
+<use xlink:href="#d" transform="translate(98,92)"/>
+<use xlink:href="#d" transform="translate(162,104)"/>
+<use xlink:href="#s" transform="translate(66,118)"/>
+<use xlink:href="#s" transform="translate(120,130)"/>
+<use xlink:href="#s" transform="translate(186,140)"/>
+<use xlink:href="#d" transform="translate(82,146)"/>
+<use xlink:href="#d" transform="translate(150,160)"/>
+<use xlink:href="#s" transform="translate(84,180)"/>
+<use xlink:href="#s" transform="translate(170,196)"/>
+<use xlink:href="#d" transform="translate(112,200)"/>
+</svg>

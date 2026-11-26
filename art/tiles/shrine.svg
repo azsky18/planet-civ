@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 256 256" width="256" height="256">
+<!-- 성소: 돌기둥이 둘러선 작은 신전 -->
+<ellipse cx="128" cy="150" rx="70" ry="40" fill="#c8bc96" opacity="0.6"/>
+<ellipse cx="136" cy="152" rx="56" ry="16" fill="#2a1e10" opacity="0.3"/>
+<path d="M76,150 L128,132 L184,150 L128,170 Z" fill="#d8ccaa" stroke="#6a5a3a" stroke-width="1.2"/>
+<path d="M76,150 L128,170 L128,176 L76,156 Z" fill="#a8987a"/><path d="M128,170 L184,150 L184,156 L128,176 Z" fill="#8a7a5c"/>
+<g fill="#ece2c6" stroke="#6a5a3a" stroke-width="1"><rect x="90" y="108" width="7" height="40"/><rect x="108" y="102" width="7" height="40"/><rect x="141" y="102" width="7" height="40"/><rect x="159" y="108" width="7" height="40"/>
+<rect x="100" y="124" width="7" height="40"/><rect x="149" y="124" width="7" height="40"/></g>
+<path d="M82,108 L128,78 L174,108 L128,100 Z" fill="#c26a3a" stroke="#6a2a14" stroke-width="1.2"/><path d="M128,78 L174,108 L128,100 Z" fill="#9a4a24"/>
+<path d="M84,108 L128,100 L172,108 L172,113 L128,105 L84,113 Z" fill="#e8dcc0" stroke="#6a5a3a" stroke-width="1"/>
+<circle cx="128" cy="140" r="6" fill="#f2c64a" stroke="#8a5a14" stroke-width="1.2"/><path d="M128,126 Q123,134 128,138 Q133,134 128,126 Z" fill="#f08a2a"/>
+</svg>

@@ -5,7 +5,7 @@ const LEVELS := [5, 6, 7]
 const LEVEL_LABELS := ["작게 (10,242칸)", "보통 (40,962칸)", "크게 (163,842칸, 느림)"]
 const MODE_LABELS := ["지형", "고도", "기온", "강수량", "판 구조", "기압과 바람", "식생"]
 ## 화면에 표시되는 빌드 이름. PC에서 어떤 버전이 실행 중인지 확인하는 용도.
-const BUILD := "v6.2 강 이음매 정리, 근접 기울임 시점"
+const BUILD := "v7.0 타일 위 그림 (식생, 시설물, 도로)"
 const COMPASS := ["북", "북동", "동", "남동", "남", "남서", "서", "북서"]
 
 var hs := HexSphere.new()
@@ -41,6 +41,7 @@ var river_chk := CheckBox.new()
 var wind_chk := CheckBox.new()
 var atmo_chk := CheckBox.new()
 var grid_chk := CheckBox.new()
+var art_chk := CheckBox.new()
 var status_lbl := Label.new()
 var info_lbl := RichTextLabel.new()
 var legend_box := VBoxContainer.new()
@@ -84,6 +85,8 @@ func _ready() -> void:
 			_pick(Vector2(float(xy[0]), float(xy[1])))
 			selected = hover
 			_update_info()
+		elif a == "--demo":
+			_demo_town()
 		elif a.begins_with("--key="):
 			_layer_action(OS.find_keycode_from_string(a.substr(6)))
 		elif a.begins_with("--mode="):
@@ -292,7 +295,16 @@ func _setup_ui() -> void:
 	chk_row.add_child(grid_chk)
 	chk_row.add_child(atmo_chk)
 	lv.add_child(chk_row)
-	lv.add_child(wind_chk)
+	art_chk.text = "타일 그림"
+	art_chk.button_pressed = true
+	art_chk.toggled.connect(func(on):
+		view.art_enabled = on
+		if current_level >= 0:
+			view.recolor())
+	var chk_row2 := HBoxContainer.new()
+	chk_row2.add_child(wind_chk)
+	chk_row2.add_child(art_chk)
+	lv.add_child(chk_row2)
 
 	lv.add_child(HSeparator.new())
 	lv.add_child(legend_box)
@@ -583,6 +595,51 @@ func _layer_action(kc: int) -> void:
 
 
 var _turns: int = 0
+
+
+## 스크린샷 점검용 (--demo): 고정한 타일에 정착지 구역을 두고, 둘레에 도로와 경작지를 깐다.
+func _demo_town() -> void:
+	var i: int = selected
+	if i < 0:
+		# 온대 평지에서 둘레가 모두 땅인 칸을 고르고 카메라를 그쪽으로 돌린다
+		for k in gen.n:
+			if gen.base[k] != TileLayers.Base.LAND or gen.relief[k] != 0 or gen.temp_band[k] != TileLayers.TempBand.TEMPERATE:
+				continue
+			var ok := true
+			for q in range(hs.nb_offsets[k], hs.nb_offsets[k + 1]):
+				var j: int = hs.nb_list[q]
+				if gen.base[j] != TileLayers.Base.LAND or gen.veg[j] == TileLayers.Veg.WETLAND:
+					ok = false
+			if ok and gen.veg[k] == TileLayers.Veg.FOREST:
+				i = k
+				break
+		if i < 0:
+			return
+		selected = i
+		var d: Vector3 = hs.centers[i]
+		pitch = -asin(d.y)
+		yaw = atan2(d.x, d.z)
+	TileLayers.clear_forest(gen, i)
+	TileLayers.drain(gen, i)
+	TileLayers.build(gen, i, TileLayers.Struct.DISTRICT)
+	var off: int = hs.nb_offsets[i]
+	var deg: int = hs.degree(i)
+	for k in deg:
+		var j: int = hs.nb_list[off + k]
+		if k % 3 == 0:
+			# 도로를 바깥으로 두 칸 잇는다
+			TileLayers.build_road(gen, j)
+			var o2: int = hs.nb_offsets[j]
+			for q in hs.degree(j):
+				var j2: int = hs.nb_list[o2 + q]
+				if j2 != i and hs.nb_list.slice(off, off + deg).find(j2) < 0:
+					TileLayers.build_road(gen, j2)
+					break
+		elif k % 3 == 1:
+			TileLayers.build(gen, j, TileLayers.Struct.FARM)
+	for k in gen.n:
+		gen.refresh_biome(k)
+	view.recolor()
 
 
 var _drag_moved: float = 0.0

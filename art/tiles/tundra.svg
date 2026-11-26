@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 256 256" width="256" height="256">
+<!-- 툰드라: 이끼와 작은 관목, 바위 -->
+<defs><g id="m"><ellipse cx="0" cy="0" rx="9" ry="4" fill="#6f7a4a"/><ellipse cx="-2" cy="-1" rx="5" ry="2" fill="#98a060"/></g>
+<g id="r"><ellipse cx="3" cy="2" rx="10" ry="3" fill="#202020" opacity="0.3"/><path d="M-9,0 L-6,-8 L2,-11 L9,-5 L8,0 Z" fill="#8a8a84" stroke="#4a4a44" stroke-width="1"/><path d="M-6,-8 L2,-11 L1,-5 Z" fill="#b4b4ae"/></g>
+<g id="s"><g stroke="#7a4a3a" stroke-width="1.6" stroke-linecap="round" fill="none"><path d="M0,0 L-5,-8 M0,0 L1,-10 M0,0 L6,-7"/></g><circle cx="-5" cy="-8" r="2" fill="#a05a44"/><circle cx="6" cy="-7" r="2" fill="#a05a44"/></g></defs>
+<use xlink:href="#s" transform="translate(176,74)"/>
+<use xlink:href="#m" transform="translate(150,76)"/>
+<use xlink:href="#m" transform="translate(90,80)"/>
+<use xlink:href="#r" transform="translate(116,90)"/>
+<use xlink:href="#r" transform="translate(170,104)"/>
+<use xlink:href="#s" transform="translate(70,104)"/>
+<use xlink:href="#s" transform="translate(100,110)"/>
+<use xlink:href="#m" transform="translate(122,118)"/>
+<use xlink:href="#s" transform="translate(150,124)"/>
+<use xlink:href="#m" transform="translate(70,128)"/>
+<use xlink:href="#m" transform="translate(180,132)"/>
+<use xlink:href="#r" transform="translate(140,148)"/>
+<use xlink:href="#r" transform="translate(80,156)"/>
+<use xlink:href="#m" transform="translate(100,170)"/>
+<use xlink:href="#m" transform="translate(156,172)"/>
+<use xlink:href="#r" transform="translate(186,186)"/>
+<use xlink:href="#s" transform="translate(118,190)"/>
+<use xlink:href="#m" transform="translate(128,206)"/>
+</svg>

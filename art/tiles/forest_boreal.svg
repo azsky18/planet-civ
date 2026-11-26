@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 256 256" width="256" height="256">
+<!-- 냉대 숲: 눈 얹은 침엽수 -->
+<defs><g id="c"><ellipse cx="4" cy="1" rx="14" ry="4.5" fill="#142008" opacity="0.35"/><rect x="-2" y="-9" width="4" height="10" fill="#5a3d22"/><path d="M0,-44 L-10,-27 L-6,-27 L-14,-14 L-8,-14 L-16,-2 L16,-2 L8,-14 L14,-14 L6,-27 L10,-27 Z" fill="#2f5a2a" stroke="#16301a" stroke-width="1.2" stroke-linejoin="round"/><path d="M0,-44 L-10,-27 L-6,-27 L-14,-14 L-8,-14 L-16,-2 L-3,-2 Z" fill="#7fae55" opacity="0.35"/><path d="M0,-44 L-5,-35 L-2,-34 L0,-37 L3,-33 L5,-35 Z M-9,-24 L-4,-25 L-1,-22 L2,-25 L7,-24 L4,-27 L-5,-27 Z" fill="#f2f5f2"/></g>
+<g id="s"><g transform="scale(0.8)"><ellipse cx="4" cy="1" rx="14" ry="4.5" fill="#142008" opacity="0.35"/><rect x="-2" y="-9" width="4" height="10" fill="#5a3d22"/><path d="M0,-44 L-10,-27 L-6,-27 L-14,-14 L-8,-14 L-16,-2 L16,-2 L8,-14 L14,-14 L6,-27 L10,-27 Z" fill="#2f5a2a" stroke="#16301a" stroke-width="1.2" stroke-linejoin="round"/><path d="M0,-44 L-10,-27 L-6,-27 L-14,-14 L-8,-14 L-16,-2 L-3,-2 Z" fill="#7fae55" opacity="0.35"/></g></g></defs>
+<use xlink:href="#c" transform="translate(100,76)"/>
+<use xlink:href="#c" transform="translate(150,80)"/>
+<use xlink:href="#c" transform="translate(126,108)"/>
+<use xlink:href="#c" transform="translate(72,112)"/>
+<use xlink:href="#c" transform="translate(180,116)"/>
+<use xlink:href="#c" transform="translate(152,144)"/>
+<use xlink:href="#c" transform="translate(98,146)"/>
+<use xlink:href="#c" transform="translate(184,170)"/>
+<use xlink:href="#c" transform="translate(126,176)"/>
+<use xlink:href="#c" transform="translate(70,178)"/>
+<use xlink:href="#c" transform="translate(156,206)"/>
+<use xlink:href="#c" transform="translate(108,210)"/>
+</svg>

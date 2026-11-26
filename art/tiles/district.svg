@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 256 256" width="256" height="256">
+<!-- 정착지 구역: 붉은 지붕 집들과 탑이 있는 마을 -->
+<defs><g id="h"><ellipse cx="6" cy="1" rx="22" ry="6" fill="#2a1e10" opacity="0.35"/><path d="M-16,0 L-16,-16 L4,-22 L4,-6 Z" fill="#e2d2a8" stroke="#5a4428" stroke-width="1"/><path d="M4,-6 L4,-22 L18,-16 L18,0 Z" fill="#b9a27a" stroke="#5a4428" stroke-width="1"/><path d="M-19,-15 L-4,-34 L7,-23 L4,-21 L-16,-15 Z" fill="#b0482c" stroke="#5a2414" stroke-width="1"/><path d="M-4,-34 L20,-17 L18,-15 L4,-22 L7,-23 Z" fill="#7e2e1c" stroke="#5a2414" stroke-width="1"/><path d="M-10,-6 L-10,-12 L-5,-13.5 L-5,-7.5 Z" fill="#4a3420"/><path d="M9,-11 L13,-9.5 L13,-5 L9,-6.5 Z" fill="#4a3420"/></g></defs>
+<ellipse cx="128" cy="140" rx="92" ry="64" fill="#b89a68" opacity="0.55"/>
+<ellipse cx="128" cy="134" rx="44" ry="24" fill="#c8ac78" opacity="0.6"/>
+<use xlink:href="#h" transform="translate(84,92)"/>
+<use xlink:href="#h" transform="translate(172,96)"/>
+<g transform="translate(128,112)"><ellipse cx="8" cy="2" rx="22" ry="7" fill="#2a1e10" opacity="0.35"/>
+<path d="M-14,0 L-14,-38 L0,-42 L0,-4 Z" fill="#ddd0b0" stroke="#5a4428" stroke-width="1"/><path d="M0,-4 L0,-42 L14,-38 L14,0 Z" fill="#a89470" stroke="#5a4428" stroke-width="1"/>
+<path d="M-17,-37 L0,-66 L17,-37 L0,-42 Z" fill="#3e6a8a" stroke="#1e3448" stroke-width="1"/><path d="M0,-66 L17,-37 L0,-42 Z" fill="#2a4a66"/>
+<rect x="-9" y="-30" width="4" height="9" rx="2" fill="#3a2a18"/><rect x="4" y="-30" width="4" height="9" rx="2" fill="#3a2a18"/></g>
+<use xlink:href="#h" transform="translate(64,140)"/>
+<use xlink:href="#h" transform="translate(194,142)"/>
+<use xlink:href="#h" transform="translate(108,160)"/>
+<use xlink:href="#h" transform="translate(154,166)"/>
+<use xlink:href="#h" transform="translate(84,196)"/>
+<use xlink:href="#h" transform="translate(176,198)"/>
+<use xlink:href="#h" transform="translate(130,208)"/>
+</svg>
