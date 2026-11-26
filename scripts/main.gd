@@ -5,7 +5,7 @@ const LEVELS := [5, 6, 7]
 const LEVEL_LABELS := ["작게 (10,242칸)", "보통 (40,962칸)", "크게 (163,842칸, 느림)"]
 const MODE_LABELS := ["지형", "고도", "기온", "강수량", "판 구조", "기압과 바람"]
 ## 화면에 표시되는 빌드 이름. PC에서 어떤 버전이 실행 중인지 확인하는 용도.
-const BUILD := "v4 경계 강 (d63e8cd 이후)"
+const BUILD := "v5 각진 경계 강, 고도 ×1.0"
 const COMPASS := ["북", "북동", "동", "남동", "남", "남서", "서", "북서"]
 
 var hs := HexSphere.new()
@@ -222,7 +222,7 @@ func _setup_ui() -> void:
 	title.add_theme_color_override("font_color", Color("e8c872"))
 	lv.add_child(title)
 	var sub := Label.new()
-	sub.text = "판 구조, 대기 순환, 물의 흐름으로 만든 세계  ·  " + BUILD
+	sub.text = "판 구조, 대기 순환, 물의 흐름으로 만든 세계\n빌드: " + BUILD
 	sub.add_theme_font_size_override("font_size", 12)
 	sub.add_theme_color_override("font_color", Color("b9a67c"))
 	lv.add_child(sub)
@@ -267,7 +267,7 @@ func _setup_ui() -> void:
 		mode_opt.add_item(MODE_LABELS[k], k)
 	mode_opt.item_selected.connect(_on_mode)
 	lv.add_child(_row("보기", mode_opt))
-	_setup_slider(lv, exag_slider, "고도 과장", 0.0, 4.0, 0.1, 1.8, func(v): return "×%.1f" % v)
+	_setup_slider(lv, exag_slider, "고도 과장", 0.0, 4.0, 0.1, 1.0, func(v): return "×%.1f" % v)
 	exag_slider.drag_ended.connect(func(_c):
 		view.exaggeration = exag_slider.value
 		if current_level >= 0:

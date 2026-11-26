@@ -15,7 +15,7 @@ const SEA_BASE := 0.004
 
 var hs: HexSphere
 var gen: WorldGen
-var exaggeration: float = 1.8
+var exaggeration: float = 1.0
 var mode: int = Mode.BIOME
 
 var tile_radius := PackedFloat32Array()     # 타일 가운데 반지름
@@ -390,7 +390,7 @@ static func _bez3(a: Vector3, c: Vector3, b: Vector3, t: float) -> Vector3:
 	return a * (u * u) + c * (2.0 * u * t) + b * (t * t)
 
 
-## 경계 강: 꼭짓점과 칸의 변을 따라 그린다. 꺾이는 꼭짓점은 살짝 둥글린다.
+## 경계 강: 해안선처럼 칸의 변을 따라 각지게 그린다.
 func _build_rivers() -> void:
 	var pos := PackedVector3Array()
 	var idx := PackedInt32Array()
@@ -407,40 +407,23 @@ func _build_rivers() -> void:
 		if d >= 0 and (main_up[d] < 0 or gen.c_flow[f] > gen.c_flow[main_up[d]]):
 			main_up[d] = f
 	var lift: float = 0.0016 * maxf(exaggeration, 0.5)
-	const SAMPLES := 8
 	for f in F:
 		if gen.c_river[f] == 0:
 			continue
 		var d: int = gen.c_down[f]
 		if d < 0:
 			continue
+		# 칸의 변을 그대로 따라가는 각진 직선. 이음매가 비지 않도록 양 끝을 폭의 절반만큼 늘린다.
 		var pf: Vector3 = _face_pos(f)
 		var pd: Vector3 = _face_pos(d)
-		var start: Vector3 = pf
-		if main_up[f] >= 0:
-			start = (_face_pos(main_up[f]) + pf) * 0.5
-		var end: Vector3 = (pf + pd) * 0.5
-		var d_sink: bool = gen.c_river[d] == 0
-		if d_sink:
-			end = pd
-		elif main_up[d] != f:
-			var ms: Vector3 = pd
-			if main_up[d] >= 0:
-				ms = (_face_pos(main_up[d]) + pd) * 0.5
-			var me: Vector3 = pd
-			if gen.c_down[d] >= 0:
-				me = (pd + _face_pos(gen.c_down[d])) * 0.5
-			end = _bez3(ms, pd, me, 0.5)
+		pf = pf.normalized() * (maxf(pf.length(), 1.0) + lift)
+		pd = pd.normalized() * (maxf(pd.length(), 1.0) + lift)
 		var w0: float = hs.spacing * (0.07 + 0.2 * sqrt(gen.c_flow[f] / max_flow))
-		var w1: float = w0 if d_sink else hs.spacing * (0.07 + 0.2 * sqrt(gen.c_flow[d] / max_flow))
-		var hint: int = hs.face_tiles[f * 3]
-		var pts: Array = []
-		for sidx in SAMPLES + 1:
-			var t: float = float(sidx) / SAMPLES
-			var dir: Vector3 = _bez3(start, pf, end, t).normalized()
-			var p: Vector3 = surface_point(dir, hint)
-			var r: float = maxf(p.length(), 1.0)
-			pts.append(dir * (r + lift))
+		var w1: float = w0
+		if gen.c_river[d] == 1:
+			w1 = hs.spacing * (0.07 + 0.2 * sqrt(gen.c_flow[d] / max_flow))
+		var dirv: Vector3 = (pd - pf).normalized()
+		var pts: Array = [pf - dirv * w0 * 0.5, pd + dirv * w1 * 0.5]
 		_strip(pos, idx, pts, w0, w1)
 	var m := ArrayMesh.new()
 	if pos.size() > 0:
