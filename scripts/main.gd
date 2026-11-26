@@ -3,9 +3,9 @@ extends Node3D
 
 const LEVELS := [5, 6, 7]
 const LEVEL_LABELS := ["작게 (10,242칸)", "보통 (40,962칸)", "크게 (163,842칸, 느림)"]
-const MODE_LABELS := ["지형", "고도", "기온", "강수량", "판 구조", "기압과 바람"]
+const MODE_LABELS := ["지형", "고도", "기온", "강수량", "판 구조", "기압과 바람", "식생"]
 ## 화면에 표시되는 빌드 이름. PC에서 어떤 버전이 실행 중인지 확인하는 용도.
-const BUILD := "v5 각진 경계 강, 고도 ×1.0"
+const BUILD := "v6 타일 레이어 (지형·기후 / 식생 / 시설물)"
 const COMPASS := ["북", "북동", "동", "남동", "남", "남서", "서", "북서"]
 
 var hs := HexSphere.new()
@@ -84,6 +84,8 @@ func _ready() -> void:
 			_pick(Vector2(float(xy[0]), float(xy[1])))
 			selected = hover
 			_update_info()
+		elif a.begins_with("--key="):
+			_layer_action(OS.find_keycode_from_string(a.substr(6)))
 		elif a.begins_with("--mode="):
 			mode_opt.select(int(a.substr(7)))
 			_on_mode(int(a.substr(7)))
@@ -316,11 +318,11 @@ func _setup_ui() -> void:
 
 	# 아래: 조작법
 	var help := Label.new()
-	help.text = "드래그: 회전   휠: 확대/축소   클릭: 타일 고정   방향키: 회전   R: 북쪽 정렬"
+	help.text = "드래그: 회전   휠: 확대/축소   클릭: 타일 고정   방향키: 회전   R: 북쪽 정렬\n고정한 타일에 시험: 1 벌목  2 배수  3 경작지  4 도로  5 정착지 구역  T 10턴 진행"
 	help.add_theme_font_size_override("font_size", 12)
 	help.add_theme_color_override("font_color", Color("9f906c"))
 	help.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	help.position = Vector2(16, -28)
+	help.position = Vector2(16, -46)
 	root.add_child(help)
 	_update_info()
 
@@ -394,6 +396,11 @@ func _update_legend() -> void:
 		PlanetView.Mode.WIND:
 			items = [[Color("3c5a8a"), "저기압대 (적도, 위도 60°)"], [Color("c2a25c"), "고기압대 (위도 30°, 극)"],
 				[Color("ffd36b"), "화살표 = 지표 바람 (코리올리로 꺾임)"]]
+		PlanetView.Mode.VEG:
+			for v in range(1, TileLayers.VEG_NAMES.size()):
+				items.append([TileLayers.VEG_COLORS[v], TileLayers.VEG_NAMES[v]])
+			items.append([Color("d9a13b"), "시설물"])
+			items.append([TileLayers.VEG_COLORS[TileLayers.Veg.GRASS].lerp(Color("c46a3a"), 0.6), "도로"])
 	var grid := GridContainer.new()
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 10)
@@ -456,6 +463,7 @@ func _regenerate() -> void:
 	var t3: int = Time.get_ticks_msec()
 	hover = -1
 	selected = -1
+	_turns = 0
 	status_lbl.text = "완성: 격자 %.1f초, 생성 %.1f초, 그리기 %.1f초" % [(t1 - t0) / 1000.0, (t2 - t1) / 1000.0, (t3 - t2) / 1000.0]
 	print(status_lbl.text)
 	var st: Dictionary = gen.stats
@@ -512,9 +520,60 @@ func _unhandled_input(event: InputEvent) -> void:
 			_update_camera()
 		else:
 			_pick(mm.position)
-	elif event is InputEventKey and event.pressed and (event as InputEventKey).keycode == KEY_R:
-		pitch = -0.35
-		_update_camera()
+	elif event is InputEventKey and event.pressed and not event.echo:
+		var kc: int = (event as InputEventKey).keycode
+		if kc == KEY_R:
+			pitch = -0.35
+			_update_camera()
+		elif kc in [KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_T]:
+			_layer_action(kc)
+
+
+## 타일 레이어 규칙을 손으로 시험해 보는 단축키. 고정한 타일(클릭)에 적용한다.
+func _layer_action(kc: int) -> void:
+	if current_level < 0 or busy:
+		return
+	var i: int = selected
+	var msg: String = ""
+	if kc == KEY_T:
+		var used := PackedByteArray()
+		used.resize(gen.n)
+		for _t in 10:
+			TileLayers.advance_turn(gen, used)
+		for k in gen.n:
+			gen.refresh_biome(k)
+		_turns += 10
+		msg = "10턴 진행 (모든 시설을 쓰지 않은 것으로 처리). 지금까지 %d턴" % _turns
+	elif i < 0:
+		msg = "먼저 타일을 클릭해서 고정하세요"
+	else:
+		match kc:
+			KEY_1:
+				msg = "벌목했습니다" if TileLayers.clear_forest(gen, i) > 0 else "숲이 아니라 벌목할 수 없습니다"
+			KEY_2:
+				msg = "배수했습니다 (습지 -> 초지)" if TileLayers.drain(gen, i) else "습지가 아니라 배수할 수 없습니다"
+			KEY_3, KEY_5:
+				var s: int = TileLayers.Struct.FARM if kc == KEY_3 else TileLayers.Struct.DISTRICT
+				var why: String = TileLayers.build_block_reason(gen, i, s)
+				if why == "":
+					TileLayers.build(gen, i, s)
+					msg = "%s을(를) 지었습니다" % TileLayers.STRUCT_NAMES[s]
+				else:
+					msg = "%s 불가: %s" % [TileLayers.STRUCT_NAMES[s], why]
+			KEY_4:
+				var why_r: String = TileLayers.road_block_reason(gen, i)
+				if why_r == "":
+					TileLayers.build_road(gen, i)
+					msg = "도로를 냈습니다"
+				else:
+					msg = "도로 불가: " + why_r
+		gen.refresh_biome(i)
+	status_lbl.text = msg
+	view.recolor()
+	_update_info()
+
+
+var _turns: int = 0
 
 
 var _drag_moved: float = 0.0
@@ -544,7 +603,7 @@ func _pick(mp: Vector2) -> void:
 func _update_info() -> void:
 	var i: int = selected if selected >= 0 else hover
 	if current_level < 0 or i < 0:
-		info_lbl.text = "[color=#e8c872][font_size=18]타일 정보[/font_size][/color]\n행성 위에 마우스를 올리면 그 칸의 지형, 기후, 물 정보를 보여 줍니다."
+		info_lbl.text = "[color=#e8c872][font_size=18]타일 정보[/font_size][/color]\n행성 위에 마우스를 올리면 그 칸의 지형, 기후, 물, 타일 레이어 정보를 보여 줍니다."
 		return
 	view.set_hover(i)
 	var lat: float = rad_to_deg(gen.lat_of(i))
@@ -584,8 +643,19 @@ func _update_info() -> void:
 	lines.append("[b]지표 바람[/b]  %s" % wind_txt)
 	if water != "":
 		lines.append("[b]물[/b]  %s" % water)
-	if gen.is_marsh[i] == 1 and gen.biome[i] != WorldGen.B.MARSH:
-		lines.append("[b]습지[/b]  있음")
+	lines.append("")
+	lines.append("[color=#e8c872]타일 레이어[/color]")
+	lines.append("[b]1층 지형·기후[/b]  %s" % TileLayers.terrain_text(gen, i))
+	if gen.base[i] == TileLayers.Base.LAND or gen.veg[i] != TileLayers.Veg.NONE:
+		var vtxt: String = TileLayers.VEG_NAMES[gen.veg[i]]
+		if gen.potential_veg[i] != gen.veg[i]:
+			vtxt += " [color=#9f906c](자연 상태: %s)[/color]" % TileLayers.VEG_NAMES[gen.potential_veg[i]]
+		lines.append("[b]2층 식생[/b]  %s" % vtxt)
+	if gen.base[i] == TileLayers.Base.LAND:
+		lines.append("[b]3층 시설물[/b]  %s" % TileLayers.structure_text(gen, i))
+		var y: Vector3i = TileLayers.yields(gen, i)
+		lines.append("[b]산출[/b]  식량 %d · 생산 %d · 교역 %d" % [y.x, y.y, y.z])
+	lines.append("")
 	var pid: int = gen.plate[i]
 	var btxt := ""
 	if gen.boundary[i] > 0.05:

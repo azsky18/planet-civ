@@ -6,7 +6,7 @@ extends Node3D
 ## 만들지 않고 높은 고도가 모여서 자연스럽게 산맥으로 보인다.
 ## 바다는 해저 지형 위에 반투명 수면 구를 덮고, 호수는 평평한 수면을 따로 그린다.
 
-enum Mode { BIOME, ELEVATION, TEMPERATURE, PRECIP, PLATES, WIND }
+enum Mode { BIOME, ELEVATION, TEMPERATURE, PRECIP, PLATES, WIND, VEG }
 
 const LAND_SCALE := 0.07     # 고도 1.0 (약 7,500m) 일 때 반지름 증가량
 const SEA_SCALE := 0.025     # 수심 쪽은 덜 과장
@@ -231,7 +231,7 @@ func recolor() -> void:
 	terrain_mesh.clear_surfaces()
 	terrain_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _arrays)
 	# 수면은 지형/고도 보기에서만 덮는다
-	water_mi.visible = mode == Mode.BIOME or mode == Mode.ELEVATION
+	water_mi.visible = mode == Mode.BIOME or mode == Mode.ELEVATION or mode == Mode.VEG
 	lake_mi.visible = water_mi.visible
 
 
@@ -279,6 +279,16 @@ func tile_color(i: int) -> Color:
 			elif bd < -0.05:
 				pc = pc.lerp(Color("37c6d8"), clampf(-bd * 1.5, 0.3, 0.9))
 			return pc
+		Mode.VEG:
+			# 2층 식생만 칠하고, 시설물이 있으면 표시한다
+			if gen.base[i] != TileLayers.Base.LAND and gen.veg[i] != TileLayers.Veg.ICE:
+				return Color("6fa0a0").lerp(Color("0e1d2e"), clampf(-gen.elevation[i] * 1.6, 0.0, 1.0))
+			var vc: Color = TileLayers.VEG_COLORS[gen.veg[i]]
+			if gen.structure[i] != TileLayers.Struct.NONE:
+				vc = Color("d9a13b") if gen.structure_state[i] == TileLayers.State.ACTIVE else Color("8a6d4a")
+			elif gen.road[i] == 1:
+				vc = vc.lerp(Color("c46a3a"), 0.6)
+			return vc
 		Mode.WIND:
 			var pv: float = clampf(gen.pressure[i] * 0.5 + 0.5, 0.0, 1.0)
 			var c2: Color = Color("3c5a8a").lerp(Color("c2a25c"), pv)
