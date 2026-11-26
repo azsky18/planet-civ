@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+<!-- 무너진 담. 세워 그리는 그림: 바닥에 닿는 점이 (64,124) -->
+<g transform="translate(64,124) scale(1.6)"><g transform="translate(-100,-150)"><path d="M60,150 L60,132 L76,124 L82,128 L90,120 L100,124 L100,140 Z" fill="#a8987a" stroke="#4a3e2c" stroke-width="1.2"/><path d="M100,140 L100,124 L108,126 L108,142 Z" fill="#7a6c54" stroke="#4a3e2c" stroke-width="1"/><path d="M68,138 L76,136 M84,134 L94,131" stroke="#6a5a44" stroke-width="1"/></g></g>
+</svg>

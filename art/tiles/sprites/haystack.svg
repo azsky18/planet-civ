@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+<!-- 짚더미. 세워 그리는 그림: 바닥에 닿는 점이 (64,124) -->
+<g transform="translate(64,124) scale(3.6)"><path d="M-10,0 Q-5,-16 0,-16 Q5,-16 10,0 Z" fill="#e6c860" stroke="#8a6a24" stroke-width="1"/><path d="M-6,-6 Q0,-9 6,-6 M-8,-2 Q0,-5 8,-2" stroke="#b89a3a" stroke-width="0.8" fill="none"/></g>
+</svg>

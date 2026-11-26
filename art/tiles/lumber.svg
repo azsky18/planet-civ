@@ -1,15 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 256 256" width="256" height="256">
-<!-- 벌목장: 오두막, 쌓인 통나무, 그루터기 -->
-<ellipse cx="128" cy="140" rx="60" ry="34" fill="#a8885a" opacity="0.5"/>
-<g transform="translate(108,128)"><ellipse cx="6" cy="1" rx="26" ry="7" fill="#2a1e10" opacity="0.35"/>
-<path d="M-20,0 L-20,-18 L6,-25 L6,-7 Z" fill="#8a5a30" stroke="#3a2410" stroke-width="1"/><path d="M6,-7 L6,-25 L22,-18 L22,0 Z" fill="#6a4220" stroke="#3a2410" stroke-width="1"/>
-<g stroke="#5a3418" stroke-width="1"><path d="M-20,-6 L6,-13 M-20,-12 L6,-19 M6,-13 L22,-6 M6,-19 L22,-12"/></g>
-<path d="M-23,-17 L-4,-38 L9,-26 L6,-24 L-20,-17 Z" fill="#6a6a4a" stroke="#2a2a1a" stroke-width="1"/><path d="M-4,-38 L25,-19 L22,-17 L6,-24 L9,-26 Z" fill="#4a4a32" stroke="#2a2a1a" stroke-width="1"/>
-<rect x="-12" y="-14" width="7" height="10" fill="#2a1a0c"/></g>
-<g transform="translate(168,160)"><ellipse cx="0" cy="4" rx="26" ry="6" fill="#2a1e10" opacity="0.3"/>
-<g fill="#9a6a3a" stroke="#4a2e14" stroke-width="1"><rect x="-24" y="-6" width="44" height="8" rx="4"/><rect x="-22" y="-14" width="44" height="8" rx="4"/><rect x="-18" y="-22" width="40" height="8" rx="4"/></g>
-<g fill="#e2c28a" stroke="#6a4a24" stroke-width="1"><circle cx="20" cy="-2" r="4"/><circle cx="22" cy="-10" r="4"/><circle cx="22" cy="-18" r="4"/></g></g>
-<g fill="#c8a06a" stroke="#4a2e14" stroke-width="1.2"><ellipse cx="72" cy="176" rx="7" ry="3.5"/><ellipse cx="102" cy="190" rx="7" ry="3.5"/><ellipse cx="136" cy="196" rx="6" ry="3"/><ellipse cx="80" cy="150" rx="6" ry="3"/></g>
-<g fill="#6a4220"><path d="M65,176 L65,181 Q72,185 79,181 L79,176 Q72,180 65,176 Z"/><path d="M95,190 L95,195 Q102,199 109,195 L109,190 Q102,194 95,190 Z"/></g>
-<path d="M150,120 L180,132" stroke="#8a6a3a" stroke-width="5" stroke-linecap="round"/><path d="M174,124 L186,136 L182,140 L170,128 Z" fill="#9a9a9a"/>
+<!-- 벌목장 바닥: 그루터기와 톱밥 (오두막, 통나무는 세워 그리는 그림) -->
+<ellipse cx="128" cy="134" rx="74" ry="48" fill="#a8885a" opacity="0.5"/>
+<g fill="#d8b88a" opacity="0.6"><circle cx="150" cy="150" r="10"/><circle cx="110" cy="120" r="7"/></g>
+<g fill="#c8a06a" stroke="#4a2e14" stroke-width="1.2"><ellipse cx="72" cy="176" rx="7" ry="3.5"/><ellipse cx="102" cy="190" rx="7" ry="3.5"/><ellipse cx="136" cy="196" rx="6" ry="3"/><ellipse cx="80" cy="150" rx="6" ry="3"/><ellipse cx="180" cy="104" rx="6" ry="3"/></g>
 </svg>

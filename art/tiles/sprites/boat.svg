@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+<!-- 고깃배. 세워 그리는 그림: 바닥에 닿는 점이 (64,124) -->
+<g transform="translate(64,114) scale(1.9)"><path d="M-28,-6 L28,-6 L20,4 L-20,4 Z" fill="#8a5a30" stroke="#3a2410" stroke-width="1.2"/><path d="M-24,-6 L24,-6" stroke="#c89a5a" stroke-width="2"/><path d="M0,-6 L0,-50" stroke="#5a3e22" stroke-width="2.5"/><path d="M2,-48 L24,-10 L2,-10 Z" fill="#efe6cc" stroke="#8a7a5a" stroke-width="1"/></g>
+</svg>

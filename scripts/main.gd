@@ -5,7 +5,7 @@ const LEVELS := [5, 6, 7]
 const LEVEL_LABELS := ["작게 (10,242칸)", "보통 (40,962칸)", "크게 (163,842칸, 느림)"]
 const MODE_LABELS := ["지형", "고도", "기온", "강수량", "판 구조", "기압과 바람", "식생"]
 ## 화면에 표시되는 빌드 이름. PC에서 어떤 버전이 실행 중인지 확인하는 용도.
-const BUILD := "v7.1 시점 돌리기 (Q/E, 휠 버튼 드래그)"
+const BUILD := "v7.2 바닥 무늬, 세운 나무·건물, 해안·강둑"
 const COMPASS := ["북", "북동", "동", "남동", "남", "남서", "서", "북서"]
 
 var hs := HexSphere.new()
@@ -92,6 +92,8 @@ func _ready() -> void:
 			_update_info()
 		elif a == "--demo":
 			_demo_town()
+		elif a.begins_with("--find="):
+			_find_and_look(a.substr(7))
 		elif a.begins_with("--key="):
 			_layer_action(OS.find_keycode_from_string(a.substr(6)))
 		elif a.begins_with("--mode="):
@@ -622,6 +624,32 @@ func _layer_action(kc: int) -> void:
 
 
 var _turns: int = 0
+
+
+## 스크린샷 점검용 (--find=river|lake|jungle|wetland|boreal|desert|mountain): 그런 칸을 찾아 카메라를 돌린다.
+func _find_and_look(what: String) -> void:
+	for k in gen.n:
+		var ok := false
+		match what:
+			"river":
+				ok = gen.is_river[k] == 1 and gen.relief[k] == 0 and gen.base[k] == TileLayers.Base.LAND
+			"lake":
+				ok = gen.is_lake[k] == 1
+			"jungle":
+				ok = TileLayers.is_jungle(gen, k)
+			"wetland":
+				ok = gen.veg[k] == TileLayers.Veg.WETLAND
+			"boreal":
+				ok = gen.veg[k] == TileLayers.Veg.FOREST and gen.temp_band[k] == TileLayers.TempBand.BOREAL
+			"desert":
+				ok = gen.base[k] == TileLayers.Base.LAND and gen.moist[k] == TileLayers.Moist.ARID and gen.relief[k] == 0
+			"mountain":
+				ok = gen.relief[k] == 2
+		if ok:
+			var d: Vector3 = hs.centers[k]
+			pitch = -asin(d.y)
+			yaw = atan2(d.x, d.z)
+			return
 
 
 ## 스크린샷 점검용 (--demo): 고정한 타일에 정착지 구역을 두고, 둘레에 도로와 경작지를 깐다.

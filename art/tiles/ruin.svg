@@ -1,11 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 256 256" width="256" height="256">
-<!-- 폐허: 무너진 담과 기둥, 덤불 (방치 끝에 남는 모든 시설의 공용 그림) -->
-<ellipse cx="128" cy="146" rx="80" ry="48" fill="#9a8a6a" opacity="0.4"/>
-<path d="M60,150 L60,132 L76,124 L82,128 L90,120 L100,124 L100,140 Z" fill="#a8987a" stroke="#4a3e2c" stroke-width="1.2"/>
-<path d="M100,140 L100,124 L108,126 L108,142 Z" fill="#7a6c54" stroke="#4a3e2c" stroke-width="1"/>
-<path d="M140,112 L140,92 L150,88 L156,96 L164,90 L176,96 L176,118 Z" fill="#a8987a" stroke="#4a3e2c" stroke-width="1.2"/>
-<path d="M176,118 L176,96 L186,100 L186,122 Z" fill="#7a6c54" stroke="#4a3e2c" stroke-width="1"/>
-<g fill="#cfc4a6" stroke="#4a3e2c" stroke-width="1"><rect x="116" y="130" width="8" height="40"/><path d="M134,170 L134,150 L138,146 L142,152 L142,170 Z"/><rect x="152" y="150" width="8" height="22"/></g>
+<!-- 폐허 바닥: 흩어진 돌과 덤불 (무너진 담, 기둥은 세워 그리는 그림) -->
+<ellipse cx="128" cy="140" rx="84" ry="60" fill="#9a8a6a" opacity="0.45"/>
+<path d="M76,150 L128,132 L184,150 L128,170 Z" fill="#b8aa88" opacity="0.6"/>
 <g transform="translate(120,190) rotate(-70)"><rect x="-4" y="-22" width="8" height="40" fill="#bfb496" stroke="#4a3e2c" stroke-width="1"/></g>
 <g fill="#9a9a90" stroke="#4a4a44" stroke-width="1"><circle cx="86" cy="172" r="5"/><circle cx="96" cy="178" r="4"/><circle cx="170" cy="182" r="5"/><circle cx="182" cy="150" r="4"/><circle cx="74" cy="110" r="4"/></g>
 <g fill="#5e7a34" stroke="#2e4a1a" stroke-width="1"><circle cx="70" cy="152" r="6"/><circle cx="108" cy="146" r="5"/><circle cx="150" cy="116" r="6"/><circle cx="164" cy="172" r="5"/></g>

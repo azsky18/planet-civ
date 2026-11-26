@@ -1,17 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 256 256" width="256" height="256">
-<!-- 숲 (온대): 활엽수와 침엽수가 섞인 숲. 바탕 256x256, 가운데 (128,128), 반지름 약 105 안에 그린다. -->
-<defs><g id="c"><ellipse cx="4" cy="1" rx="14" ry="4.5" fill="#142008" opacity="0.35"/><rect x="-2" y="-9" width="4" height="10" fill="#5a3d22"/><path d="M0,-44 L-10,-27 L-6,-27 L-14,-14 L-8,-14 L-16,-2 L16,-2 L8,-14 L14,-14 L6,-27 L10,-27 Z" fill="#2f5a2a" stroke="#16301a" stroke-width="1.2" stroke-linejoin="round"/><path d="M0,-44 L-10,-27 L-6,-27 L-14,-14 L-8,-14 L-16,-2 L-3,-2 Z" fill="#7fae55" opacity="0.35"/></g><g id="b"><ellipse cx="4" cy="1" rx="14" ry="4.5" fill="#142008" opacity="0.35"/><rect x="-2" y="-12" width="4" height="13" fill="#5a3d22"/><path d="M0,-40 C-10,-41 -18,-33 -17,-24 C-22,-20 -21,-10 -13,-8 C-9,-3 0,-4 3,-8 C10,-4 19,-8 18,-16 C23,-22 18,-32 11,-33 C9,-39 4,-41 0,-40 Z" fill="#557f2f" stroke="#22381a" stroke-width="1.2"/><path d="M-13,-26 C-11,-33 -3,-37 4,-34 C-2,-31 -8,-27 -9,-20 Z" fill="#a8c86a" opacity="0.5"/></g></defs>
-<use xlink:href="#c" transform="translate(98,78)"/>
-<use xlink:href="#c" transform="translate(164,84)"/>
-<use xlink:href="#b" transform="translate(132,92)"/>
-<use xlink:href="#c" transform="translate(72,118)"/>
-<use xlink:href="#b" transform="translate(100,118)"/>
-<use xlink:href="#c" transform="translate(186,124)"/>
-<use xlink:href="#b" transform="translate(152,128)"/>
-<use xlink:href="#c" transform="translate(112,152)"/>
-<use xlink:href="#b" transform="translate(72,160)"/>
-<use xlink:href="#b" transform="translate(132,160)"/>
-<use xlink:href="#b" transform="translate(186,162)"/>
-<use xlink:href="#c" transform="translate(150,190)"/>
-<use xlink:href="#b" transform="translate(112,198)"/>
+<!-- 숲 바닥: 낙엽과 그늘 (나무는 세워 그리는 그림) -->
+<defs><radialGradient id="g"><stop offset="0" stop-color="#2a4018" stop-opacity="0.55"/><stop offset="1" stop-color="#2a4018" stop-opacity="0"/></radialGradient></defs>
+<ellipse cx="128" cy="128" rx="104" ry="100" fill="url(#g)"/>
+<g fill="#5a4a24" opacity="0.5"><ellipse cx="96" cy="96" rx="14" ry="6"/><ellipse cx="160" cy="110" rx="12" ry="5"/><ellipse cx="110" cy="164" rx="16" ry="6"/><ellipse cx="170" cy="170" rx="10" ry="4"/><ellipse cx="76" cy="140" rx="9" ry="4"/></g>
+<g fill="#8a6a2a" opacity="0.6"><circle cx="120" cy="84" r="2"/><circle cx="140" cy="140" r="2"/><circle cx="88" cy="120" r="2"/><circle cx="186" cy="138" r="2"/><circle cx="130" cy="196" r="2"/><circle cx="66" cy="168" r="2"/></g>
 </svg>
