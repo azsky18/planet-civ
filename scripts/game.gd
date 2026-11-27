@@ -14,7 +14,6 @@ var sel_camp: GameRules.Camp = null
 
 var _unit_nodes := {}            # unit id -> Node3D
 var _res_nodes := {}             # tile -> [Node3D, Label3D, 마지막 양]
-var _camp_labels := {}           # 칸 -> Label3D (야영지 이름)
 var _font_bold: Font
 var _tag_nodes := {}             # 칸 -> Label3D (야영지·부족민 이름표)
 var _mats := {}
@@ -27,13 +26,22 @@ var _camp_sig: String = "[]"
 # HUD
 var turn_lbl := Label.new()
 var pop_lbl := Label.new()
-var log_lbl := RichTextLabel.new()
+var log_lbl := Label.new()
 var sel_title := Label.new()
 var sel_body := RichTextLabel.new()
 var sel_buttons := HBoxContainer.new()
 var msg_lbl := Label.new()
 var over_lbl := Label.new()
 var help_panel: PanelContainer
+var info_panel: PanelContainer
+var log_panel := PanelContainer.new()
+var hp_row := HBoxContainer.new()
+var end_btn: Button
+var banner_layer := Control.new()
+var _banners := {}               # 칸 -> 야영지 배너 (2D)
+var shot_wait: float = 0.0
+var fight_shots: String = ""   # 점검용: 합마다 화면을 이 경로(%d 포함)로 저장
+var _fight_shot_n: int = 0
 
 
 func _ready() -> void:
@@ -55,6 +63,10 @@ func _ready() -> void:
 		elif a.begins_with("--dist="):
 			dist = float(a.substr(7))
 			dist_target = dist
+		elif a.begins_with("--fightshots="):
+			fight_shots = a.substr(13)
+		elif a.begins_with("--wait="):
+			shot_wait = float(a.substr(7))
 		elif a.begins_with("--play="):
 			script_steps = Array(a.substr(7).split(","))
 	await get_tree().process_frame
@@ -63,6 +75,8 @@ func _ready() -> void:
 		_scripted(s)
 	_update_camera()
 	if shot != "":
+		if shot_wait > 0.0:
+			await get_tree().create_timer(shot_wait).timeout
 		for _f in 10:
 			await get_tree().process_frame
 		get_viewport().get_texture().get_image().save_png(shot)
@@ -81,6 +95,24 @@ func _scripted(s: String) -> void:
 			if sel_unit != null:
 				sel_unit.hp = maxi(sel_unit.hp - 1, 1)
 				_after_action()
+		"fight":
+			# 전투 연출 점검용: 곁에 들소를 두고 공격한다
+			if sel_unit != null:
+				for j in rules.neighbors(sel_unit.tile):
+					if rules.is_land(j) and rules.unit_at(j) == null and rules.camp_at(j) == null:
+						rules.spawn("bison", j)
+						_sync_marks()
+						_order(j)
+						break
+		"inspect":
+			# 칸 정보 점검용: 가까운 동물 칸을 고정해서 보여 준다
+			if sel_unit != null:
+				var near3: Dictionary = rules.within(sel_unit.tile, 4)
+				for j in near3:
+					if rules.animal_at(j) != null:
+						selected = j
+						_update_info()
+						break
 		"next":
 			_select_next()
 		"gather":
@@ -285,7 +317,7 @@ func _hp_texture(hp: int, full: int) -> ImageTexture:
 	img.fill(Color(0.05, 0.04, 0.03, 0.9))
 	for k in full:
 		# k = 0 이 맨 아래 칸
-		var col: Color = Color("3fcf4a") if k < hp else Color("d63a2c")
+		var col: Color = Color("3fcf4a") if k < hp else Color("e8382a")
 		var y1: int = h - 1 - k * seg_h
 		for y in range(y1 - seg_h + 1, y1):
 			for x in range(1, w - 1):
@@ -308,7 +340,7 @@ func _unit_text(u: GameRules.Unit) -> String:
 
 
 ## 규칙 상태에 맞춰 표식을 만들거나 옮기거나 지운다.
-func _sync_marks(full: bool = false) -> void:
+func _sync_marks(full: bool = false, keep: Dictionary = {}) -> void:
 	var alive := {}
 	var stack := {}
 	for u in rules.units:
@@ -356,6 +388,7 @@ func _sync_marks(full: bool = false) -> void:
 			bar.set_meta("on", true)
 			node.add_child(bar)
 			_labels.append(bar)
+			node.set_meta("kind", u.kind)
 			marks.add_child(node)
 			_unit_nodes[u.id] = node
 		(node.get_node("hp") as Sprite3D).texture = _hp_texture(u.hp, int(u.info()["hp"]))
@@ -369,7 +402,7 @@ func _sync_marks(full: bool = false) -> void:
 		if u.side() != GameRules.Side.PLAYER:
 			(node.get_node("label") as Label3D).text = _unit_text(u)
 	for id in _unit_nodes.keys():
-		if not alive.has(id):
+		if not alive.has(id) and not keep.has(id):
 			_unit_nodes[id].queue_free()
 			_unit_nodes.erase(id)
 	# 채집 식량: 칸 가운데에 그림으로만 보여 준다 (남은 양은 칸을 클릭하면 오른쪽 정보 창에)
@@ -402,20 +435,7 @@ func _sync_marks(full: bool = false) -> void:
 			(entry[0] as Sprite3D).alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD if amt > 0 else SpriteBase3D.ALPHA_CUT_DISABLED
 	# 야영지와 부족민이 있는 칸: 이름표 하나에 모아 쓴다 (겹치지 않게)
 	var tags := {}
-	for c in rules.camps:
-		var cl: Label3D = _camp_labels.get(c.tile)
-		if cl == null:
-			cl = _label("", Color("f3e4b6"), 19, 1.0, _font_bold)
-			cl.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-			cl.transform = _frame(_ground(c.tile))
-			cl.position += cl.transform.basis.y * hs.spacing * 0.05
-			marks.add_child(cl)
-			_camp_labels[c.tile] = cl
-		cl.text = "%s  인구 %d/%d · 식량 %d/%d" % [c.name, c.pop, GameRules.CAMP_MAX_POP, c.food, GameRules.growth_need(c.pop)]
-	for t in _camp_labels.keys():
-		if rules.camp_at(t) == null:
-			_camp_labels[t].queue_free()
-			_camp_labels.erase(t)
+	_sync_banners()
 	for u in rules.player_units():
 		if not tags.has(u.tile):
 			tags[u.tile] = []
@@ -448,7 +468,7 @@ func _sync_marks(full: bool = false) -> void:
 			_tag_nodes[t] = lbl
 		lbl.text = "\n".join(tags[t])
 		# 야영지 이름 아래 줄에 오도록 (화면 픽셀 기준으로 내림)
-		lbl.offset = Vector2(0, -22) if rules.camp_at(t) != null else Vector2.ZERO
+		lbl.offset = Vector2(0, -48) if rules.camp_at(t) != null else Vector2.ZERO
 	var sig: String = str(rules.camp_tiles.keys())
 	if sig != _camp_sig:
 		_camp_sig = sig
@@ -459,6 +479,21 @@ func _sync_marks(full: bool = false) -> void:
 func _process(delta: float) -> void:
 	super._process(delta)
 	_cull_labels()
+	if rules != null:
+		_place_banners()
+		# 문명3 처럼 움직일 부족민이 없으면 턴 종료 단추가 은은하게 깜빡인다
+		if end_btn != null:
+			var idle: bool = _movable_count() == 0 and not busy
+			var k: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() / 260.0) if idle else 1.0
+			end_btn.modulate = Color(1, 1, 1).lerp(Color(1.25, 1.12, 0.8), (1.0 - k) if idle else 0.0)
+
+
+func _movable_count() -> int:
+	var n: int = 0
+	for u in rules.player_units():
+		if u.mp > 0 and u.path.is_empty():
+			n += 1
+	return n
 
 
 ## 행성 뒤쪽(지평선 너머)에 있는 글자와 꺼 둔 글자를 숨긴다.
@@ -528,7 +563,12 @@ func _setup_ui() -> void:
 	root.theme = theme
 	layer.add_child(root)
 
-	# 위: 한 줄 상단 막대 (시대·턴, 부족 인구, 조작법, 처음 화면)
+	# 야영지 배너 (문명3 도시 배너처럼 지도 위에 2D 로 띄운다). 다른 판보다 먼저 넣어 아래에 깔리게.
+	banner_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	banner_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(banner_layer)
+
+	# 위: 한 줄 상단 막대
 	var top := PanelContainer.new()
 	var tsb := _panel_style(0.92)
 	tsb.set_border_width_all(0)
@@ -547,8 +587,7 @@ func _setup_ui() -> void:
 	turn_lbl.add_theme_font_size_override("font_size", 18)
 	turn_lbl.add_theme_color_override("font_color", UI_GOLD)
 	tr.add_child(turn_lbl)
-	var bar := VSeparator.new()
-	tr.add_child(bar)
+	tr.add_child(VSeparator.new())
 	pop_lbl.add_theme_font_size_override("font_size", 13)
 	pop_lbl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	tr.add_child(pop_lbl)
@@ -556,114 +595,122 @@ func _setup_ui() -> void:
 	fill.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tr.add_child(fill)
+	var sub := Label.new()
+	sub.text = "빌드 " + BUILD.split(" ")[0]
+	sub.tooltip_text = BUILD
+	sub.add_theme_font_size_override("font_size", 10)
+	sub.add_theme_color_override("font_color", Color(UI_MUTED.r, UI_MUTED.g, UI_MUTED.b, 0.7))
+	sub.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	sub.mouse_filter = Control.MOUSE_FILTER_PASS
+	tr.add_child(sub)
 	tr.add_child(_button("조작법 (F1)", _toggle_help))
 	tr.add_child(_button("처음 화면 (Esc)", _to_menu))
 
-	# 왼쪽 위: 사건 기록 (반투명, 틀 없이)
-	var left := PanelContainer.new()
-	var lsb := _panel_style(0.62)
-	lsb.border_color = Color(UI_LINE.r, UI_LINE.g, UI_LINE.b, 0.18)
+	# 왼쪽 위: 사건 기록
+	var left := log_panel
+	var lsb := _panel_style(0.55)
+	lsb.border_color = Color(UI_LINE.r, UI_LINE.g, UI_LINE.b, 0.15)
+	lsb.shadow_size = 0
 	left.add_theme_stylebox_override("panel", lsb)
-	left.position = Vector2(12, 56)
-	left.custom_minimum_size = Vector2(320, 0)
+	left.position = Vector2(12, 52)
+	left.custom_minimum_size = Vector2(300, 0)
 	left.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(left)
 	var lv := VBoxContainer.new()
-	lv.add_theme_constant_override("separation", 6)
+	lv.add_theme_constant_override("separation", 4)
 	left.add_child(lv)
-	var lt := Label.new()
-	lt.text = "사건 기록"
-	lt.add_theme_font_size_override("font_size", 11)
-	lt.add_theme_color_override("font_color", UI_MUTED)
-	lv.add_child(lt)
-	log_lbl.bbcode_enabled = true
-	log_lbl.fit_content = true
-	log_lbl.scroll_active = false
-	log_lbl.custom_minimum_size = Vector2(292, 0)
+	log_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	log_lbl.custom_minimum_size = Vector2(272, 0)
 	log_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	log_lbl.add_theme_font_size_override("normal_font_size", 12)
-	log_lbl.add_theme_constant_override("line_separation", 2)
+	log_lbl.add_theme_font_size_override("font_size", 12)
+	log_lbl.add_theme_color_override("font_color", Color("c8c0ad"))
 	lv.add_child(log_lbl)
-	var sub := Label.new()
-	sub.text = "빌드: " + BUILD
-	sub.add_theme_font_size_override("font_size", 10)
-	sub.add_theme_color_override("font_color", Color(UI_MUTED.r, UI_MUTED.g, UI_MUTED.b, 0.7))
-	lv.add_child(sub)
 
-	# 오른쪽 위: 타일 정보
-	var right := PanelContainer.new()
-	right.add_theme_stylebox_override("panel", _panel_style())
-	right.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	right.offset_left = -12 - 300
-	right.offset_right = -12
-	right.offset_top = 56
-	right.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	right.custom_minimum_size = Vector2(300, 0)
-	root.add_child(right)
+	# 오른쪽 위: 칸 정보 (문명3 처럼 꼭 필요한 몇 줄만). 보여 줄 것이 없으면 숨긴다.
+	info_panel = PanelContainer.new()
+	info_panel.add_theme_stylebox_override("panel", _panel_style(0.9))
+	info_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	info_panel.offset_left = -12 - 250
+	info_panel.offset_right = -12
+	info_panel.offset_top = 52
+	info_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	info_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(info_panel)
 	info_lbl.bbcode_enabled = true
 	info_lbl.fit_content = true
 	info_lbl.scroll_active = false
-	info_lbl.custom_minimum_size = Vector2(272, 0)
-	info_lbl.add_theme_font_override("bold_font", load("res://fonts/NanumGothic-Bold.ttf"))
-	right.add_child(info_lbl)
+	info_lbl.custom_minimum_size = Vector2(222, 0)
+	info_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	info_lbl.add_theme_font_override("bold_font", _font_bold)
+	info_lbl.add_theme_font_size_override("normal_font_size", 13)
+	info_lbl.add_theme_font_size_override("bold_font_size", 13)
+	info_panel.add_child(info_lbl)
 
-	# 왼쪽 아래: 고른 부족민 / 야영지 카드
-	var bottom := PanelContainer.new()
-	var bsb := _panel_style(0.94)
+	# 오른쪽 아래: 문명3 의 정보 상자. 위에 명령 단추 줄, 안에 고른 유닛·야영지, 맨 아래 턴 종료.
+	var br := VBoxContainer.new()
+	br.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	br.offset_right = -12
+	br.offset_bottom = -12
+	br.offset_left = -12 - 340
+	br.offset_top = -12
+	br.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	br.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	br.add_theme_constant_override("separation", 6)
+	root.add_child(br)
+	sel_buttons.add_theme_constant_override("separation", 4)
+	sel_buttons.alignment = BoxContainer.ALIGNMENT_END
+	br.add_child(sel_buttons)
+	var box := PanelContainer.new()
+	var bsb := _panel_style(0.95)
 	bsb.border_width_top = 2
-	bsb.border_color = UI_LINE
-	bottom.add_theme_stylebox_override("panel", bsb)
-	bottom.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	bottom.offset_left = 12
-	bottom.offset_bottom = -12
-	bottom.offset_top = -12
-	bottom.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	bottom.custom_minimum_size = Vector2(500, 0)
-	root.add_child(bottom)
+	box.add_theme_stylebox_override("panel", bsb)
+	box.custom_minimum_size = Vector2(340, 0)
+	br.add_child(box)
 	var bv := VBoxContainer.new()
-	bv.add_theme_constant_override("separation", 7)
-	bottom.add_child(bv)
+	bv.add_theme_constant_override("separation", 6)
+	box.add_child(bv)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 10)
+	bv.add_child(head)
 	sel_title.add_theme_font_override("font", font_title)
 	sel_title.add_theme_font_size_override("font_size", 18)
 	sel_title.add_theme_color_override("font_color", UI_GOLD)
-	bv.add_child(sel_title)
+	sel_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(sel_title)
+	hp_row.add_theme_constant_override("separation", 2)
+	hp_row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	head.add_child(hp_row)
 	bv.add_child(HSeparator.new())
 	sel_body.bbcode_enabled = true
 	sel_body.fit_content = true
 	sel_body.scroll_active = false
-	sel_body.custom_minimum_size = Vector2(472, 0)
+	sel_body.custom_minimum_size = Vector2(312, 0)
+	sel_body.add_theme_font_override("bold_font", _font_bold)
+	sel_body.add_theme_font_size_override("normal_font_size", 13)
+	sel_body.add_theme_font_size_override("bold_font_size", 13)
 	bv.add_child(sel_body)
-	sel_buttons.add_theme_constant_override("separation", 6)
-	bv.add_child(sel_buttons)
 	msg_lbl.add_theme_font_size_override("font_size", 12)
 	msg_lbl.add_theme_color_override("font_color", Color("d9b46a"))
 	msg_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	msg_lbl.custom_minimum_size = Vector2(472, 0)
+	msg_lbl.custom_minimum_size = Vector2(312, 0)
 	bv.add_child(msg_lbl)
-
-	# 오른쪽 아래: 다음 부족민, 턴 종료
-	var br := VBoxContainer.new()
-	br.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	br.offset_right = -16
-	br.offset_bottom = -16
-	br.offset_left = -16 - 210
-	br.offset_top = -16
-	br.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	br.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	br.add_theme_constant_override("separation", 8)
-	root.add_child(br)
-	var nb := _button("다음 부족민 (N)", _select_next)
-	nb.custom_minimum_size = Vector2(210, 30)
-	br.add_child(nb)
-	var eb := _button("턴 종료  ⏎", _end_turn, true, "Enter")
-	eb.custom_minimum_size = Vector2(210, 54)
-	eb.add_theme_font_override("font", font_title)
-	eb.add_theme_font_size_override("font_size", 20)
-	eb.add_theme_color_override("font_color", Color("f1e2bd"))
-	eb.add_theme_stylebox_override("normal", _flat(Color("2a2418"), UI_GOLD, 2))
-	eb.add_theme_stylebox_override("hover", _flat(Color("3a3120"), Color("e6c47a"), 2))
-	eb.add_theme_stylebox_override("pressed", _flat(Color("1c1810"), UI_GOLD, 2))
-	br.add_child(eb)
+	bv.add_child(HSeparator.new())
+	var tail := HBoxContainer.new()
+	tail.add_theme_constant_override("separation", 6)
+	bv.add_child(tail)
+	var nb := _button("다음 (N)", _select_next)
+	nb.custom_minimum_size = Vector2(96, 40)
+	tail.add_child(nb)
+	end_btn = _button("턴 종료  ⏎", _end_turn, true, "Enter")
+	end_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	end_btn.custom_minimum_size = Vector2(0, 40)
+	end_btn.add_theme_font_override("font", font_title)
+	end_btn.add_theme_font_size_override("font_size", 18)
+	end_btn.add_theme_color_override("font_color", Color("f1e2bd"))
+	end_btn.add_theme_stylebox_override("normal", _flat(Color("2a2418"), UI_GOLD, 2))
+	end_btn.add_theme_stylebox_override("hover", _flat(Color("3a3120"), Color("e6c47a"), 2))
+	end_btn.add_theme_stylebox_override("pressed", _flat(Color("1c1810"), UI_GOLD, 2))
+	tail.add_child(end_btn)
 
 	# 조작법: F1 로 여닫는 판
 	help_panel = PanelContainer.new()
@@ -688,9 +735,9 @@ func _setup_ui() -> void:
 	grid.add_theme_constant_override("h_separation", 24)
 	grid.add_theme_constant_override("v_separation", 5)
 	hv.add_child(grid)
-	for pair in [["왼쪽 클릭", "부족민·야영지·칸 고르기"], ["오른쪽 클릭", "이동, 곁의 동물 공격"],
+	for pair in [["왼쪽 클릭", "부족민·야영지·칸 고르기 (야영지 배너를 눌러도 됨)"], ["오른쪽 클릭", "이동, 곁의 동물 공격"],
 			["B", "야영지 세우기"], ["G", "채집"], ["J", "야영지에 합류"], ["U", "부족민 내보내기"],
-			["N / Tab", "다음 부족민"], ["Space", "이번 턴 쉬기"], ["Enter", "턴 종료"],
+			["N / Tab", "다음 부족민"], ["Space", "이번 턴 쉬기 (체력 1칸 회복)"], ["Enter", "턴 종료"],
 			["드래그 / 휠", "회전 / 확대·축소"], ["Q / E", "시점 돌리기"], ["C", "고른 곳으로 시점 이동"],
 			["F1", "이 창 여닫기"], ["Esc", "처음 화면"]]:
 		var k := Label.new()
@@ -713,8 +760,139 @@ func _setup_ui() -> void:
 	_update_info()
 
 
+## 글이 바뀐 판을 내용에 맞게 다시 잰다 (RichTextLabel 높이는 한 프레임 늦게 정해짐)
+func _fit_panels() -> void:
+	await get_tree().process_frame
+	# 자동 줄바꿈 글의 최소 높이가 실제보다 작게 잡히는 일이 있어 줄 수로 직접 잡아 준다
+	log_lbl.custom_minimum_size.y = log_lbl.get_line_count() * (log_lbl.get_line_height() + 3) + 6
+	log_panel.reset_size()
+	if info_panel != null:
+		info_panel.reset_size()
+
+
 func _toggle_help() -> void:
 	help_panel.visible = not help_panel.visible
+
+
+## 체력 칸을 UI 로: 남은 칸 초록, 깎인 칸 빨강 (지도 위 막대와 같은 색)
+func _set_hp_row(hp: int, full: int) -> void:
+	for c in hp_row.get_children():
+		c.queue_free()
+	for k in full:
+		var r := ColorRect.new()
+		r.custom_minimum_size = Vector2(12, 9)
+		r.color = Color("3fcf4a") if k < hp else Color("e8382a")
+		hp_row.add_child(r)
+
+
+# ---------------------------------------------------------------- 야영지 배너
+
+## 문명3 도시 배너: [인구] 이름 [성장까지 턴], 아래에 식량 창고 막대
+func _make_banner(c: GameRules.Camp) -> Control:
+	var b := PanelContainer.new()
+	var sb := _flat(Color(0.07, 0.08, 0.10, 0.9), Color(0.79, 0.65, 0.35, 0.8), 1)
+	sb.content_margin_left = 0
+	sb.content_margin_right = 6
+	sb.content_margin_top = 0
+	sb.content_margin_bottom = 0
+	b.add_theme_stylebox_override("panel", sb)
+	b.mouse_filter = Control.MOUSE_FILTER_STOP
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	b.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT and not busy:
+			var cc: GameRules.Camp = rules.camp_at(b.get_meta("tile"))
+			if cc != null:
+				_select_camp(cc))
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 0)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b.add_child(v)
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 6)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(h)
+	var pop := Label.new()
+	pop.name = "pop"
+	pop.custom_minimum_size = Vector2(24, 24)
+	pop.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	pop.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	pop.add_theme_font_override("font", _font_bold)
+	pop.add_theme_font_size_override("font_size", 15)
+	pop.add_theme_color_override("font_color", Color("ffffff"))
+	var psb := StyleBoxFlat.new()
+	psb.bg_color = Color("2f5fb8")
+	psb.set_corner_radius_all(1)
+	pop.add_theme_stylebox_override("normal", psb)
+	h.add_child(pop)
+	var name_l := Label.new()
+	name_l.name = "name"
+	name_l.add_theme_font_override("font", _font_bold)
+	name_l.add_theme_font_size_override("font_size", 14)
+	name_l.add_theme_color_override("font_color", Color("f3ead2"))
+	name_l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	h.add_child(name_l)
+	var grow := Label.new()
+	grow.name = "grow"
+	grow.add_theme_font_size_override("font_size", 11)
+	grow.add_theme_color_override("font_color", Color("9fd38a"))
+	grow.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	h.add_child(grow)
+	var bar := ProgressBar.new()
+	bar.name = "food"
+	bar.show_percentage = false
+	bar.custom_minimum_size = Vector2(0, 4)
+	var bg := StyleBoxFlat.new()
+	bg.bg_color = Color(0.2, 0.18, 0.12, 0.9)
+	var fg := StyleBoxFlat.new()
+	fg.bg_color = Color("6fbf4a")
+	bar.add_theme_stylebox_override("background", bg)
+	bar.add_theme_stylebox_override("fill", fg)
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(bar)
+	b.set_meta("tile", c.tile)
+	banner_layer.add_child(b)
+	return b
+
+
+func _sync_banners() -> void:
+	for c in rules.camps:
+		var b: Control = _banners.get(c.tile)
+		if b == null:
+			b = _make_banner(c)
+			_banners[c.tile] = b
+		var need: int = GameRules.growth_need(c.pop)
+		var net: int = rules.camp_net(c)
+		(b.find_child("pop", true, false) as Label).text = str(c.pop)
+		(b.find_child("name", true, false) as Label).text = c.name
+		var g: String
+		if c.pop >= GameRules.CAMP_MAX_POP:
+			g = "가득"
+		elif net <= 0:
+			g = "정체"
+		else:
+			g = "%d턴" % int(ceil(float(maxi(need - c.food, 0)) / float(net)))
+		(b.find_child("grow", true, false) as Label).text = g
+		var bar := b.find_child("food", true, false) as ProgressBar
+		bar.max_value = need
+		bar.value = c.food
+		b.reset_size()
+	for t in _banners.keys():
+		if rules.camp_at(t) == null:
+			_banners[t].queue_free()
+			_banners.erase(t)
+
+
+## 배너를 야영지 칸 바로 아래 화면 위치에 둔다. 행성 뒤쪽이거나 너무 멀면 숨긴다.
+func _place_banners() -> void:
+	var cp: Vector3 = cam.global_position
+	for t in _banners:
+		var b: Control = _banners[t]
+		var p: Vector3 = _ground(t)
+		var front: bool = (cp - p).dot(p.normalized()) > 0.0 and dist < 2.2
+		b.visible = front and not cam.is_position_behind(p)
+		if b.visible:
+			var sp: Vector2 = cam.unproject_position(p)
+			b.position = (sp + Vector2(-b.size.x * 0.5, 14)).round()
 
 
 func _button(text: String, cb: Callable, enabled: bool = true, tip: String = "") -> Button:
@@ -737,9 +915,10 @@ func _refresh_hud() -> void:
 		camp_pop += c.pop
 	pop_lbl.text = "부족 인구 %d명 = 야영지 %d곳 %d명 + 부족민 %d명" % [rules.population(), rules.camps.size(), camp_pop, units]
 	var lines: Array = []
-	for e in rules.events.slice(-9):
+	for e in rules.events.slice(-6):
 		lines.append(e)
-	log_lbl.text = "[color=#c8c0ad]" + "\n".join(lines) + "[/color]"
+	log_lbl.text = "\n".join(lines)
+	_fit_panels.call_deferred()
 	over_lbl.visible = rules.game_over
 	over_lbl.text = "부족이 모두 사라졌습니다"
 	_refresh_selection()
@@ -751,42 +930,62 @@ func _refresh_selection() -> void:
 		c.queue_free()
 	if sel_unit != null and not rules.units.has(sel_unit):
 		sel_unit = null
+	_set_hp_row(0, 0)
 	if sel_unit != null:
 		var u: GameRules.Unit = sel_unit
-		sel_title.text = "%s %s  (남은 이동력 %d/%d)" % [u.name(), stat_text(u), u.mp, u.info()["mp"]]
+		sel_title.text = u.name()
+		_set_hp_row(u.hp, int(u.info()["hp"]))
 		var t: Array = []
-		t.append("공/방/이동 %s · 체력 %d/%d · 들고 있는 식량 %d/%d" % [stat_text(u), u.hp, u.info()["hp"], u.carry, GameRules.CARRY_MAX])
+		t.append("[b]공격[/b] %d   [b]방어[/b] %d   [b]이동[/b] %d/%d   [b]체력[/b] %d/%d" % [u.info()["a"], u.info()["d"], u.mp, u.info()["mp"], u.hp, u.info()["hp"]])
+		t.append("[color=#9a917e]식량[/color] %d/%d   [color=#9a917e]땅[/color] %s" % [u.carry, GameRules.CARRY_MAX, _terrain_name(u.tile)])
 		var gt: int = rules.gather_target(u)
 		if gt >= 0:
-			t.append("채집 가능: %s (식량 %d, 한 번에 모두 거둠)" % [GameRules.RES_NAMES[rules.res_kind[gt]], rules.res_amt[gt]])
+			t.append("[color=#9fd38a]채집 가능: %s, 식량 %d[/color]" % [GameRules.RES_NAMES[rules.res_kind[gt]], rules.res_amt[gt]])
 		if not u.path.is_empty():
-			t.append("목적지까지 %d칸 남음 (턴마다 이어서 이동)" % u.path.size())
+			t.append("[color=#9a917e]목적지까지 %d칸[/color]" % u.path.size())
 		sel_body.text = "\n".join(t)
 		var why_c: String = rules.camp_block_reason(u)
-		sel_buttons.add_child(_button("야영지 세우기 (B)", _act_camp, why_c == "", why_c))
+		sel_buttons.add_child(_button("야영지 B", _act_camp, why_c == "", why_c if why_c != "" else "야영지 세우기"))
 		var why_g: String = rules.gather_block_reason(u)
-		sel_buttons.add_child(_button("채집 (G)", _act_gather, why_g == "", why_g))
+		sel_buttons.add_child(_button("채집 G", _act_gather, why_g == "", why_g if why_g != "" else "채집"))
 		if rules.camp_at(u.tile) != null:
 			var why_j: String = rules.join_block_reason(u)
-			sel_buttons.add_child(_button("야영지에 합류 (J)", _act_join, why_j == "", why_j))
-		sel_buttons.add_child(_button("쉬기 (Space)", _act_rest, u.mp > 0))
+			sel_buttons.add_child(_button("합류 J", _act_join, why_j == "", why_j if why_j != "" else "야영지에 합류"))
+		sel_buttons.add_child(_button("쉬기 Space", _act_rest, u.mp > 0, "이번 턴 쉬기 (다음 턴 체력 1칸 회복)"))
 	elif sel_camp != null:
 		var c: GameRules.Camp = sel_camp
-		sel_title.text = "%s  (인구 %d/%d)" % [c.name, c.pop, GameRules.CAMP_MAX_POP]
+		sel_title.text = c.name
 		var net: int = rules.camp_net(c)
+		var need: int = GameRules.growth_need(c.pop)
 		var t2: Array = []
-		t2.append("식량 창고 %d/%d · 턴당 %+d (일하는 칸 %d곳, 모닥불 +%d, 먹는 양 -%d)" % [c.food, GameRules.growth_need(c.pop), net, rules.camp_worked(c).size(), GameRules.CAMP_BONUS, GameRules.FOOD_PER_POP * c.pop])
+		t2.append("[b]인구[/b] %d/%d   [b]식량[/b] %d/%d   [b]턴당[/b] %+d" % [c.pop, GameRules.CAMP_MAX_POP, c.food, need, net])
+		t2.append("[color=#9a917e]일하는 칸 %d곳, 모닥불 +%d, 먹는 양 -%d[/color]" % [rules.camp_worked(c).size(), GameRules.CAMP_BONUS, GameRules.FOOD_PER_POP * c.pop])
 		if c.pop >= GameRules.CAMP_MAX_POP:
-			t2.append("[color=#d9a066]인구가 가득 찼습니다. 부족민을 내보내 사냥과 채집을 보내세요.[/color]")
-		else:
-			t2.append("부족민이 식량을 들고 들어오면 창고에 쌓이고, 창고가 차면 턴이 끝날 때 인구가 1 늡니다.")
+			t2.append("[color=#d9a066]인구가 가득 찼습니다. 부족민을 내보내세요.[/color]")
+		elif net > 0:
+			t2.append("[color=#9fd38a]%d턴 뒤 인구 +1[/color]" % int(ceil(float(maxi(need - c.food, 0)) / float(net))))
 		sel_body.text = "\n".join(t2)
 		var why_r: String = rules.release_block_reason(c)
-		var rel_txt: String = "부족민 내보내기 (U)" if c.pop > 1 else "모두 떠나기 (U, 야영지 사라짐)"
-		sel_buttons.add_child(_button(rel_txt, _act_release, why_r == "", why_r))
+		var rel_txt: String = "내보내기 U" if c.pop > 1 else "모두 떠나기 U"
+		sel_buttons.add_child(_button(rel_txt, _act_release, why_r == "", why_r if why_r != "" else ("부족민 1명 내보내기" if c.pop > 1 else "마지막 사람이 떠나면 야영지가 사라집니다")))
 	else:
-		sel_title.text = "고른 것 없음"
-		sel_body.text = "부족민이나 야영지를 왼쪽 클릭으로 고르세요. N 을 누르면 아직 움직일 수 있는 부족민으로 갑니다."
+		sel_title.text = "수렵채집 부족"
+		if _movable_count() == 0:
+			sel_body.text = "[color=#d9b46a]모든 부족민이 움직였습니다. 턴을 마치세요 (Enter).[/color]"
+		else:
+			sel_body.text = "[color=#9a917e]움직일 부족민 %d명. N 으로 다음 부족민을 고르세요.[/color]" % _movable_count()
+
+
+## 칸 이름: 생물군 + 기복 + 물 (문명3 의 "초원 (강)" 처럼 짧게)
+func _terrain_name(i: int) -> String:
+	if not rules.is_land(i):
+		return "호수" if gen.is_lake[i] == 1 else "바다"
+	var parts: Array = [WorldGen.BIOME_NAMES[gen.biome[i]]]
+	if gen.relief[i] > 0:
+		parts.append(WorldGen.RELIEF_NAMES[gen.relief[i]])
+	if gen.is_river[i] == 1:
+		parts.append("강")
+	return " · ".join(parts)
 
 
 # ---------------------------------------------------------------- 행동
@@ -796,8 +995,79 @@ func _say(m: String) -> void:
 
 
 func _after_action() -> void:
+	if busy:
+		return   # 전투를 보여 주는 중이면 끝날 때 한꺼번에 갱신된다
+	if not rules.fights.is_empty():
+		await _play_fights()
 	_sync_marks()
 	_refresh_hud()
+
+
+## 전투를 한 합씩 보여 준다: 공격하는 쪽이 달려들고, 맞은 쪽 체력 막대가 한 칸씩 빨갛게 바뀐다.
+func _play_fights() -> void:
+	var keep := {}
+	for f in rules.fights:
+		keep[f["att"]] = true
+		keep[f["def"]] = true
+	_sync_marks(false, keep)
+	busy = true
+	for f in rules.fights:
+		var an: Node3D = _unit_nodes.get(f["att"])
+		var dn: Node3D = _unit_nodes.get(f["def"])
+		if an == null or dn == null or not is_instance_valid(an) or not is_instance_valid(dn):
+			continue
+		var af: int = int(GameRules.KINDS[_kind_of(f["att"], an)]["hp"])
+		var df: int = int(GameRules.KINDS[_kind_of(f["def"], dn)]["hp"])
+		var ah: int = f["att_hp"]
+		var dh: int = f["def_hp"]
+		var abar := an.get_node("hp") as Sprite3D
+		var dbar := dn.get_node("hp") as Sprite3D
+		abar.texture = _hp_texture(ah, af)
+		dbar.texture = _hp_texture(dh, df)
+		# 공격자는 방어자 쪽 칸 경계까지 나와서 싸운다
+		var home: Vector3 = an.position
+		var front: Vector3 = home.lerp(dn.position, 0.45)
+		var t0 := create_tween()
+		t0.tween_property(an, "position", front, 0.18)
+		await t0.finished
+		for hit in f["rounds"]:
+			var victim: Node3D = dn if hit else an
+			if hit:
+				dh -= 1
+				dbar.texture = _hp_texture(dh, df)
+			else:
+				ah -= 1
+				abar.texture = _hp_texture(ah, af)
+			var base: Vector3 = victim.position
+			var side: Vector3 = victim.transform.basis.x * hs.spacing * 0.05
+			var tw := create_tween()
+			tw.tween_property(victim, "position", base + side, 0.05)
+			tw.tween_property(victim, "position", base - side, 0.08)
+			tw.tween_property(victim, "position", base, 0.05)
+			await tw.finished
+			if fight_shots != "":
+				await RenderingServer.frame_post_draw
+				get_viewport().get_texture().get_image().save_png(fight_shots % _fight_shot_n)
+				_fight_shot_n += 1
+			await get_tree().create_timer(0.32).timeout
+		var loser: Node3D = dn if dh <= 0 else an
+		var tl := create_tween()
+		tl.tween_property(loser, "scale", Vector3.ONE * 0.05, 0.3)
+		await tl.finished
+		loser.visible = false
+		if loser != an:
+			var tb := create_tween()
+			tb.tween_property(an, "position", home, 0.15)
+			await tb.finished
+	rules.fights.clear()
+	busy = false
+
+
+func _kind_of(id: int, node: Node3D) -> String:
+	for u in rules.units:
+		if u.id == id:
+			return u.kind
+	return node.get_meta("kind", "tribe")
 
 
 func _act_camp() -> void:
@@ -865,7 +1135,7 @@ func _act_rest() -> void:
 
 
 func _order(goal: int) -> void:
-	if sel_unit == null or goal < 0:
+	if sel_unit == null or goal < 0 or busy:
 		return
 	var m: String = rules.order_move(sel_unit, goal)
 	if m != "":
@@ -880,6 +1150,8 @@ func _end_turn() -> void:
 	_say("")
 	sel_camp = null
 	sel_unit = null
+	if not rules.fights.is_empty():
+		await _play_fights()
 	_sync_marks()
 	_select_next()
 	_refresh_hud()
@@ -1017,35 +1289,43 @@ func _pick(mp: Vector2) -> void:
 
 
 func _update_info() -> void:
-	super._update_info()
-	if rules == null:
+	if rules == null or info_panel == null:
 		return
 	var i: int = selected if selected >= 0 else hover
 	if i < 0:
+		info_panel.visible = false
 		return
+	view.set_hover(i)
+	info_panel.visible = true
 	var lines: Array = []
-	var a: GameRules.Unit = rules.animal_at(i)
-	if a != null:
-		var kind: String = "먹잇감" if a.side() == GameRules.Side.PREY else "포식자, 곁에 오면 덮침"
-		lines.append("[color=#c9a75a][font_size=17]%s[/font_size][/color]  [color=#9a917e](%s)[/color]" % [a.name(), kind])
-		lines.append("공/방/이동 %s · 체력 %d/%d · 고기 %d" % [stat_text(a), a.hp, a.info()["hp"], a.info()["food"]])
-		lines.append("[color=#9a917e]이 칸의 방어 보정 ×%.2f[/color]" % rules.terrain_defense(i))
-		if sel_unit != null and rules.units.has(sel_unit):
-			var odds: float = rules.attack_odds(sel_unit, a)
-			var near: String = "" if rules.is_adjacent(sel_unit.tile, i) else " (곁으로 가야 공격 가능)"
-			lines.append("[b]공격 승률[/b] %d%%%s" % [int(round(odds * 100.0)), near])
-	var c: GameRules.Camp = rules.camp_at(i)
-	if c != null:
-		lines.append("[color=#c9a75a][font_size=17]%s[/font_size][/color]  인구 %d/%d, 식량 %d/%d" % [c.name, c.pop, GameRules.CAMP_MAX_POP, c.food, GameRules.growth_need(c.pop)])
-	var ps: Array = rules.players_at(i)
-	if not ps.is_empty():
-		lines.append("부족민 %d명" % ps.size())
+	lines.append("[font_size=16][color=#c9a75a]%s[/color][/font_size]%s" % [_terrain_name(i), "  [color=#9a917e]고정[/color]" if selected >= 0 else ""])
+	if rules.is_land(i):
+		var y: Vector3i = TileLayers.yields(gen, i)
+		var dfn: int = int(round((rules.terrain_defense(i) - 1.0) * 100.0))
+		var row: String = "[color=#9a917e]식량[/color] %d" % y.x
+		if dfn > 0:
+			row += "    [color=#9a917e]방어[/color] +%d%%" % dfn
+		lines.append(row)
 	var r: int = rules.res_kind[i]
 	if r != GameRules.Res.NONE:
 		if rules.res_amt[i] > 0:
-			lines.append("[b]채집 식량[/b]  %s, 거두면 식량 %d" % [GameRules.RES_NAMES[r], rules.res_amt[i]])
+			lines.append("[color=#9fd38a]%s[/color]  채집하면 식량 %d" % [GameRules.RES_NAMES[r], rules.res_amt[i]])
 		else:
-			lines.append("[b]채집 식량[/b]  %s, 다 거둠 (%d턴 뒤 다시 자람)" % [GameRules.RES_NAMES[r], rules.res_wait[i]])
-	if lines.is_empty():
-		return
-	info_lbl.text = "\n".join(lines) + "\n\n" + info_lbl.text
+			lines.append("[color=#9a917e]%s  다 거둠, %d턴 뒤 다시 자람[/color]" % [GameRules.RES_NAMES[r], rules.res_wait[i]])
+	var c: GameRules.Camp = rules.camp_at(i)
+	if c != null:
+		lines.append("[b]%s[/b]  인구 %d" % [c.name, c.pop])
+	var ps: Array = rules.players_at(i)
+	if not ps.is_empty():
+		lines.append("부족민 %d명" % ps.size())
+	var a: GameRules.Unit = rules.animal_at(i)
+	if a != null:
+		var col: String = "#d9d0b8" if a.side() == GameRules.Side.PREY else "#e3a493"
+		lines.append("[b][color=%s]%s[/color][/b] %s   체력 %d/%d" % [col, a.name(), stat_text(a), a.hp, a.info()["hp"]])
+		if sel_unit != null and rules.units.has(sel_unit):
+			var odds: int = int(round(rules.attack_odds(sel_unit, a) * 100.0))
+			var oc: String = "#9fd38a" if odds >= 60 else ("#d9b46a" if odds >= 40 else "#e07a5f")
+			lines.append("공격 승률 [b][color=%s]%d%%[/color][/b]%s" % [oc, odds, "" if rules.is_adjacent(sel_unit.tile, i) else "  [color=#9a917e](곁으로 가야 함)[/color]"])
+	info_lbl.text = "\n".join(lines)
+	_fit_panels.call_deferred()
+
