@@ -16,11 +16,11 @@ var _unit_nodes := {}            # unit id -> Node3D
 var _res_nodes := {}             # tile -> [Node3D, Label3D, 마지막 양]
 var _tag_nodes := {}             # 칸 -> Label3D (야영지·부족민 이름표)
 var _mats := {}
-var _labels: Array = []          # 깊이 검사를 끈 글자들 (뒤쪽 숨김 대상)
+var _labels: Array = []          # 깊이 검사를 끈 글자와 체력 막대 (뒤쪽 숨김 대상)
 var _token_mesh: Mesh
 var _animal_mesh: Mesh
 var _res_mesh: Mesh
-var _camp_count_drawn: int = 0
+var _camp_sig: String = "[]"
 
 # HUD
 var turn_lbl := Label.new()
@@ -72,6 +72,11 @@ func _scripted(s: String) -> void:
 			_act_camp()
 		"end":
 			_end_turn()
+		"hurt":
+			# 체력 막대 점검용
+			if sel_unit != null:
+				sel_unit.hp = maxi(sel_unit.hp - 1, 1)
+				_after_action()
 		"next":
 			_select_next()
 		"gather":
@@ -238,10 +243,37 @@ func _unit_color(u: GameRules.Unit) -> Color:
 	return Color("d2452f")
 
 
+var _hp_tex := {}
+
+## 체력 막대 그림: 칸 하나가 체력 1. 남은 체력은 초록, 잃은 체력은 빨강, 위에서부터 잃는다.
+func _hp_texture(hp: int, full: int) -> ImageTexture:
+	var key: String = "%d/%d" % [hp, full]
+	if _hp_tex.has(key):
+		return _hp_tex[key]
+	var seg_h: int = 7
+	var w: int = 7
+	var h: int = full * seg_h + 1
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0.05, 0.04, 0.03, 0.9))
+	for k in full:
+		# k = 0 이 맨 아래 칸
+		var col: Color = Color("3fcf4a") if k < hp else Color("d63a2c")
+		var y1: int = h - 1 - k * seg_h
+		for y in range(y1 - seg_h + 1, y1):
+			for x in range(1, w - 1):
+				img.set_pixel(x, y, col)
+	var t := ImageTexture.create_from_image(img)
+	_hp_tex[key] = t
+	return t
+
+
+## 문명3 처럼 공격/방어/이동력
+static func stat_text(u: GameRules.Unit) -> String:
+	return "%d/%d/%d" % [u.info()["a"], u.info()["d"], u.info()["mp"]]
+
+
 func _unit_text(u: GameRules.Unit) -> String:
-	var t: String = u.name()
-	if u.hp < int(u.info()["hp"]):
-		t += " ♥%d" % u.hp
+	var t: String = "%s %s" % [u.name(), stat_text(u)]
 	if u.carry > 0:
 		t += " 식량 %d" % u.carry
 	return t
@@ -279,8 +311,25 @@ func _sync_marks(full: bool = false) -> void:
 				lbl.position = Vector3(0, hs.spacing * 0.4, 0)
 				lbl.name = "label"
 				node.add_child(lbl)
+			var bar := Sprite3D.new()
+			bar.name = "hp"
+			bar.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+			bar.fixed_size = true
+			bar.pixel_size = 0.0017
+			bar.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+			bar.no_depth_test = true
+			bar.render_priority = 21
+			bar.shaded = false
+			bar.position = Vector3(0, hs.spacing * 0.2, 0)
+			# 문명3 처럼 유닛 왼쪽에 세로 체력 막대 (화면 기준으로 왼쪽에 붙도록 픽셀 오프셋)
+			bar.offset = Vector2(-11, 2) if u.side() == GameRules.Side.PLAYER else Vector2(-17, 2)
+			bar.visibility_range_end = 0.6 if u.side() == GameRules.Side.PLAYER else 0.32
+			bar.set_meta("on", true)
+			node.add_child(bar)
+			_labels.append(bar)
 			marks.add_child(node)
 			_unit_nodes[u.id] = node
+		(node.get_node("hp") as Sprite3D).texture = _hp_texture(u.hp, int(u.info()["hp"]))
 		var k: int = stack.get(u.tile, 0)
 		stack[u.tile] = k + 1
 		var tf: Transform3D = _frame(_ground(u.tile))
@@ -337,9 +386,7 @@ func _sync_marks(full: bool = false) -> void:
 			for u in ps:
 				carry += u.carry
 				hurt += int(u.info()["hp"]) - u.hp
-			var line: String = "부족민" if ps.size() == 1 else "부족민 ×%d" % ps.size()
-			if hurt > 0:
-				line += " 부상"
+			var line: String = ("부족민 " if ps.size() == 1 else "부족민 ×%d " % ps.size()) + stat_text(ps[0])
 			if carry > 0:
 				line += " · 식량 %d" % carry
 			tags[t].append(line)
@@ -365,8 +412,9 @@ func _sync_marks(full: bool = false) -> void:
 			_tag_nodes[t] = lbl
 		lbl.text = "\n".join(tags[t])
 		lbl.modulate = Color("ffe9a8") if rules.camp_at(t) != null else Color("cfe0ff")
-	if rules.camps.size() != _camp_count_drawn:
-		_camp_count_drawn = rules.camps.size()
+	var sig: String = str(rules.camp_tiles.keys())
+	if sig != _camp_sig:
+		_camp_sig = sig
 		view.recolor()
 	_draw_selection()
 
@@ -381,10 +429,11 @@ func _cull_labels() -> void:
 	var cp: Vector3 = cam.global_position
 	var k: int = 0
 	while k < _labels.size():
-		var l: Label3D = _labels[k]
-		if not is_instance_valid(l) or l.is_queued_for_deletion():
+		var obj = _labels[k]
+		if not is_instance_valid(obj) or (obj as Node3D).is_queued_for_deletion() or not (obj as Node3D).is_inside_tree():
 			_labels.remove_at(k)
 			continue
+		var l: Node3D = obj
 		var p: Vector3 = l.global_position
 		l.visible = bool(l.get_meta("on", true)) and (cp - p).dot(p.normalized()) > 0.0
 		k += 1
@@ -600,9 +649,9 @@ func _refresh_selection() -> void:
 		sel_unit = null
 	if sel_unit != null:
 		var u: GameRules.Unit = sel_unit
-		sel_title.text = "%s  (이동력 %d/%d)" % [u.name(), u.mp, u.info()["mp"]]
+		sel_title.text = "%s %s  (남은 이동력 %d/%d)" % [u.name(), stat_text(u), u.mp, u.info()["mp"]]
 		var t: Array = []
-		t.append("체력 %d/%d · 공격 %d · 방어 %d · 들고 있는 식량 %d/%d" % [u.hp, u.info()["hp"], u.info()["a"], u.info()["d"], u.carry, GameRules.CARRY_MAX])
+		t.append("공/방/이동 %s · 체력 %d/%d · 들고 있는 식량 %d/%d" % [stat_text(u), u.hp, u.info()["hp"], u.carry, GameRules.CARRY_MAX])
 		var gt: int = rules.gather_target(u)
 		if gt >= 0:
 			t.append("채집 가능: %s (남은 양 %d)" % [GameRules.RES_NAMES[rules.res_kind[gt]], rules.res_amt[gt]])
@@ -629,7 +678,8 @@ func _refresh_selection() -> void:
 			t2.append("부족민이 식량을 들고 들어오면 창고에 쌓이고, 창고가 차면 턴이 끝날 때 인구가 1 늡니다.")
 		sel_body.text = "\n".join(t2)
 		var why_r: String = rules.release_block_reason(c)
-		sel_buttons.add_child(_button("부족민 내보내기 (U)", _act_release, why_r == "", why_r))
+		var rel_txt: String = "부족민 내보내기 (U)" if c.pop > 1 else "모두 떠나기 (U, 야영지 사라짐)"
+		sel_buttons.add_child(_button(rel_txt, _act_release, why_r == "", why_r))
 	else:
 		sel_title.text = "고른 것 없음"
 		sel_body.text = "부족민이나 야영지를 왼쪽 클릭으로 고르세요. N 을 누르면 아직 움직일 수 있는 부족민으로 갑니다."
@@ -863,7 +913,8 @@ func _update_info() -> void:
 	if a != null:
 		var kind: String = "먹잇감" if a.side() == GameRules.Side.PREY else "포식자, 곁에 오면 덮침"
 		lines.append("[color=#e8c872][font_size=17]%s[/font_size][/color]  [color=#9f906c](%s)[/color]" % [a.name(), kind])
-		lines.append("체력 %d/%d · 공격 %d · 방어 %d (지형 보정 ×%.2f) · 고기 %d" % [a.hp, a.info()["hp"], a.info()["a"], a.info()["d"], rules.terrain_defense(i), a.info()["food"]])
+		lines.append("공/방/이동 %s · 체력 %d/%d · 고기 %d" % [stat_text(a), a.hp, a.info()["hp"], a.info()["food"]])
+		lines.append("[color=#9f906c]이 칸의 방어 보정 ×%.2f[/color]" % rules.terrain_defense(i))
 		if sel_unit != null and rules.units.has(sel_unit):
 			var odds: float = rules.attack_odds(sel_unit, a)
 			var near: String = "" if rules.is_adjacent(sel_unit.tile, i) else " (곁으로 가야 공격 가능)"

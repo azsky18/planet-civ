@@ -5,7 +5,7 @@ extends RefCounted
 ## 핵심 규칙
 ## - 유닛 1개 = 인구 1. 부족민이 야영지를 세우면 그 부족민이 야영지 인구 1이 된다.
 ## - 야영지는 비용과 턴 없이 바로 세운다. 최대 인구 3.
-## - 야영지 인구가 2 이상이면 인구 1을 부족민 1명으로 내보낼 수 있고, 부족민은 야영지에 합류해 인구가 될 수 있다.
+## - 야영지 인구 1을 부족민 1명으로 내보낼 수 있다 (마지막 1명이 나가면 야영지는 사라짐). 부족민은 야영지에 합류해 인구가 될 수 있다.
 ## - 부족민은 야생 식량을 채집하거나 동물을 사냥해 식량을 들고 다니다 야영지에 들어가면 내려놓는다.
 ## - 야영지에 식량이 성장 기준만큼 모이면 턴이 끝날 때 인구가 1 는다.
 ## - 전투는 문명3 방식: 공격력 대 (지형 보정을 받은) 방어력으로 한 합씩 겨뤄 진 쪽이 체력 1을 잃고, 체력이 0이 되면 쓰러진다.
@@ -525,18 +525,28 @@ func join_camp(u: Unit) -> bool:
 
 
 func release_block_reason(c: Camp) -> String:
-	if c.pop < 2:
-		return "인구가 2 이상이어야 함"
+	if c.pop < 1:
+		return "인구가 없음"
 	return ""
 
 
-## 야영지 인구 1을 부족민 1명으로 내보낸다.
+## 야영지 인구 1을 부족민 1명으로 내보낸다. 마지막 1명이 나가면 야영지는 사라지고,
+## 창고의 식량은 나가는 부족민이 들 수 있는 만큼 들고 간다.
 func release_unit(c: Camp) -> Unit:
 	if release_block_reason(c) != "":
 		return null
 	c.pop -= 1
 	var u: Unit = spawn("tribe", c.tile)
-	note("%s에서 부족민 1명이 나왔습니다 (인구 %d)." % [c.name, c.pop])
+	if c.pop > 0:
+		note("%s에서 부족민 1명이 나왔습니다 (인구 %d)." % [c.name, c.pop])
+		return u
+	u.carry = mini(c.food, CARRY_MAX)
+	camps.erase(c)
+	camp_tiles.erase(c.tile)
+	if gen.structure[c.tile] == L.Struct.CAMP:
+		L._remove_structure(gen, c.tile)
+		gen.refresh_biome(c.tile)
+	note("%s의 마지막 사람이 떠나 야영지가 사라졌습니다 (식량 %d 챙김)." % [c.name, u.carry])
 	return u
 
 
