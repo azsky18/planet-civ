@@ -16,6 +16,7 @@ var _unit_nodes := {}            # unit id -> Node3D
 var _res_nodes := {}             # tile -> [Node3D, Label3D, 마지막 양]
 var _tag_nodes := {}             # 칸 -> Label3D (야영지·부족민 이름표)
 var _mats := {}
+var _labels: Array = []          # 깊이 검사를 끈 글자들 (뒤쪽 숨김 대상)
 var _token_mesh: Mesh
 var _animal_mesh: Mesh
 var _res_mesh: Mesh
@@ -218,6 +219,13 @@ func _label(text: String, col: Color, size: int, range_end: float) -> Label3D:
 	l.pixel_size = 0.0009
 	l.double_sided = true
 	l.visibility_range_end = range_end
+	# 강, 격자, 물, 다른 그림에 가려 글자가 끊기지 않게 깊이 검사를 끄고 맨 나중에 그린다.
+	# 대신 행성 뒤쪽에 있는 글자는 _process 에서 숨긴다.
+	l.no_depth_test = true
+	l.render_priority = 20
+	l.outline_render_priority = 19
+	l.set_meta("on", true)
+	_labels.append(l)
 	return l
 
 
@@ -338,13 +346,13 @@ func _sync_marks(full: bool = false) -> void:
 		var r2: int = rules.res_kind[t]
 		if r2 != GameRules.Res.NONE:
 			tags[t].append("%s %d" % [GameRules.RES_SHORT[r2], rules.res_amt[t]])
-			(_res_nodes[t][1] as Label3D).visible = false
+			(_res_nodes[t][1] as Label3D).set_meta("on", false)
 	for t in _tag_nodes.keys():
 		if not tags.has(t):
 			_tag_nodes[t].queue_free()
 			_tag_nodes.erase(t)
 			if _res_nodes.has(t):
-				(_res_nodes[t][1] as Label3D).visible = true
+				(_res_nodes[t][1] as Label3D).set_meta("on", true)
 	for t in tags:
 		var lbl: Label3D = _tag_nodes.get(t)
 		if lbl == null:
@@ -353,10 +361,6 @@ func _sync_marks(full: bool = false) -> void:
 			lbl.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 			lbl.transform = _frame(_ground(t))
 			lbl.position += lbl.transform.basis.y * hs.spacing * 0.05
-			# 땅에 파묻히지 않게 깊이 검사를 끄고, 행성 뒤쪽은 _process 에서 숨긴다
-			lbl.no_depth_test = true
-			lbl.render_priority = 2
-			lbl.outline_render_priority = 1
 			marks.add_child(lbl)
 			_tag_nodes[t] = lbl
 		lbl.text = "\n".join(tags[t])
@@ -369,11 +373,21 @@ func _sync_marks(full: bool = false) -> void:
 
 func _process(delta: float) -> void:
 	super._process(delta)
+	_cull_labels()
+
+
+## 행성 뒤쪽(지평선 너머)에 있는 글자와 꺼 둔 글자를 숨긴다.
+func _cull_labels() -> void:
 	var cp: Vector3 = cam.global_position
-	for t in _tag_nodes:
-		var l: Label3D = _tag_nodes[t]
-		var p: Vector3 = l.position
-		l.visible = (cp - p).dot(p.normalized()) > 0.0
+	var k: int = 0
+	while k < _labels.size():
+		var l: Label3D = _labels[k]
+		if not is_instance_valid(l) or l.is_queued_for_deletion():
+			_labels.remove_at(k)
+			continue
+		var p: Vector3 = l.global_position
+		l.visible = bool(l.get_meta("on", true)) and (cp - p).dot(p.normalized()) > 0.0
+		k += 1
 
 
 func _ring(i: int, im: ImmediateMesh, lift: float) -> void:
