@@ -246,28 +246,27 @@ func _unit_color(u: GameRules.Unit) -> Color:
 var _hp_tex := {}
 var _res_tex := {}
 
-## 채집 식량 그림 (64px SVG). 밝은 원판 위에 그려 어느 바닥에서도 잘 보이게 한다.
-const RES_SVG := {
-	1: "<g stroke='#6b4a12' stroke-width='2'><path d='M32 58 L32 18' fill='none'/><g fill='#f0c23e'><ellipse cx='32' cy='14' rx='4' ry='7'/><ellipse cx='25' cy='22' rx='4' ry='7' transform='rotate(-30 25 22)'/><ellipse cx='39' cy='22' rx='4' ry='7' transform='rotate(30 39 22)'/><ellipse cx='25' cy='33' rx='4' ry='7' transform='rotate(-30 25 33)'/><ellipse cx='39' cy='33' rx='4' ry='7' transform='rotate(30 39 33)'/><ellipse cx='26' cy='44' rx='4' ry='6' transform='rotate(-30 26 44)'/><ellipse cx='38' cy='44' rx='4' ry='6' transform='rotate(30 38 44)'/></g></g>",
-	2: "<g stroke='#2f5a1c' stroke-width='2' fill='none'><path d='M30 58 C30 40 30 26 40 14'/><path d='M30 58 C26 44 20 36 14 30'/><path d='M30 58 C34 46 42 40 50 38'/></g><g fill='#f7f3e0' stroke='#7a6a3a' stroke-width='1.5'><ellipse cx='42' cy='14' rx='3' ry='5'/><ellipse cx='38' cy='21' rx='3' ry='5'/><ellipse cx='45' cy='22' rx='3' ry='5'/><ellipse cx='14' cy='27' rx='3' ry='5'/><ellipse cx='19' cy='32' rx='3' ry='5'/><ellipse cx='50' cy='34' rx='3' ry='5'/><ellipse cx='45' cy='39' rx='3' ry='5'/></g>",
-	3: "<path d='M32 10 C40 6 48 10 50 16 C42 18 36 16 32 10 Z' fill='#4f9a3a' stroke='#245018' stroke-width='2'/><path d='M32 10 L32 20' stroke='#5a3a1a' stroke-width='2'/><g fill='#b0305e' stroke='#5a1030' stroke-width='2'><circle cx='26' cy='28' r='8'/><circle cx='40' cy='28' r='8'/><circle cx='33' cy='40' r='8'/><circle cx='21' cy='42' r='7'/><circle cx='45' cy='42' r='7'/><circle cx='33' cy='53' r='6'/></g><g fill='#f2b6cf'><circle cx='23' cy='25' r='2'/><circle cx='37' cy='25' r='2'/><circle cx='30' cy='37' r='2'/></g>",
-	4: "<path d='M8 32 C18 16 40 16 50 32 C40 48 18 48 8 32 Z' fill='#4aa3e0' stroke='#1c4f78' stroke-width='2.5'/><path d='M48 32 L60 20 L60 44 Z' fill='#4aa3e0' stroke='#1c4f78' stroke-width='2.5'/><circle cx='18' cy='29' r='3' fill='#10263a'/><path d='M26 24 C30 30 30 34 26 40' fill='none' stroke='#1c4f78' stroke-width='2'/>",
-	5: "<path d='M32 54 L10 30 C12 14 52 14 54 30 Z' fill='#f2a693' stroke='#8a3f2f' stroke-width='2.5'/><g stroke='#8a3f2f' stroke-width='2' fill='none'><path d='M32 54 L20 22'/><path d='M32 54 L32 18'/><path d='M32 54 L44 22'/><path d='M32 54 L13 28'/><path d='M32 54 L51 28'/></g><path d='M24 54 L40 54 L36 60 L28 60 Z' fill='#e48a76' stroke='#8a3f2f' stroke-width='2'/>",
-}
+## 채집 식량 그림: art/tiles/resource/ 의 이름.svg (같은 이름의 PNG 가 있으면 그것). 256px, 바닥 점 (128,244).
+## 그림을 바꾸려면 파일만 바꾸면 된다. 만드는 스크립트는 art/tools/gen_resources.py.
+const RES_ART := ["", "wheat", "rice", "berry", "fish", "shell"]
 
 
 func _res_icon(r: int) -> Texture2D:
 	if _res_tex.has(r):
 		return _res_tex[r]
-	var svg: String = "<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'>" \
-		+ "<circle cx='32' cy='34' r='29' fill='#fff8e6' fill-opacity='0.82' stroke='#3a2a14' stroke-width='2.5'/>" \
-		+ RES_SVG[r] + "</svg>"
-	var img := Image.new()
-	img.load_svg_from_string(svg, 2.0)
+	var path: String = ""
+	for e in TileArt.scan("resource"):
+		if e[0] == RES_ART[r]:
+			path = e[1]
+	var img: Image = TileArt.Atlas.load_image(path, 256) if path != "" else null
+	if img == null:
+		img = Image.create(4, 4, false, Image.FORMAT_RGBA8)
+		img.fill(GameRules.RES_COLORS[r])
 	img.generate_mipmaps()
 	var t := ImageTexture.create_from_image(img)
 	_res_tex[r] = t
 	return t
+
 
 ## 체력 막대 그림: 칸 하나가 체력 1. 남은 체력은 초록, 잃은 체력은 빨강, 위에서부터 잃는다.
 func _hp_texture(hp: int, full: int) -> ImageTexture:
@@ -378,13 +377,15 @@ func _sync_marks(full: bool = false) -> void:
 			var icon := Sprite3D.new()
 			icon.texture = _res_icon(r)
 			icon.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-			icon.pixel_size = hs.spacing * 0.34 / 128.0
+			# 칸 너비의 절반쯤 되는 크기로, 그림의 바닥 점이 칸 가운데 땅에 닿게 세운다
+			icon.pixel_size = hs.spacing * 0.62 / 256.0
+			icon.offset = Vector2(0, 128 - 12)
 			icon.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
 			icon.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 			icon.shaded = false
 			icon.visibility_range_end = 0.9
 			var tf: Transform3D = _frame(_ground(i))
-			icon.position = tf.origin + tf.basis.y * hs.spacing * 0.18
+			icon.position = tf.origin + tf.basis.y * hs.spacing * 0.01
 			marks.add_child(icon)
 			entry = [icon, -1]
 			_res_nodes[i] = entry

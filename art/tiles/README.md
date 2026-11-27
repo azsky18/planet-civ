@@ -42,6 +42,7 @@
 | `ground/` | 256, 이음매 없이 반복 | 바닥 무늬. 땅(grass, plains, desert, tundra, snow, rock), 물(deep, shallow, lake, ice), 물가(shore_sand, shore_grass, shore_mud, shore_rock, shore_ice, shore_gravel). 식생을 걷어 내도 남는다. |
 | `combo/` | 256, 삼각형 | 세 칸 꼭짓점의 완성 그림 (위 설명). 비어 있어도 된다. |
 | `decal/` | 256 | 칸 위에 깔리는 그림. 식생 바닥(grass, forest, wetland ...), 시설 바닥(farm, district ...), road, road_alone, river, river_bank, shadow |
+| `resource/` | 256, 바닥 점 (128,244) | 채집 식량 자원 그림: wheat(야생 밀), rice(야생 쌀), berry(나무 열매), fish(물고기), shell(조개). 칸 가운데에 세워 그린다. `art/tools/gen_resources.py` 로 만든 임시 그림. |
 | `sprite/` | 128, 바닥 점 (64,124) | 세워 그리는 그림: 나무, 집, 탑, 천막 ... 그림자는 그리지 않는다 (따로 깔림). |
 
 ### 물가 무늬는 땅 종류마다 다르다
