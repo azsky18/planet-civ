@@ -244,6 +244,30 @@ func _unit_color(u: GameRules.Unit) -> Color:
 
 
 var _hp_tex := {}
+var _res_tex := {}
+
+## 채집 식량 그림 (64px SVG). 밝은 원판 위에 그려 어느 바닥에서도 잘 보이게 한다.
+const RES_SVG := {
+	1: "<g stroke='#6b4a12' stroke-width='2'><path d='M32 58 L32 18' fill='none'/><g fill='#f0c23e'><ellipse cx='32' cy='14' rx='4' ry='7'/><ellipse cx='25' cy='22' rx='4' ry='7' transform='rotate(-30 25 22)'/><ellipse cx='39' cy='22' rx='4' ry='7' transform='rotate(30 39 22)'/><ellipse cx='25' cy='33' rx='4' ry='7' transform='rotate(-30 25 33)'/><ellipse cx='39' cy='33' rx='4' ry='7' transform='rotate(30 39 33)'/><ellipse cx='26' cy='44' rx='4' ry='6' transform='rotate(-30 26 44)'/><ellipse cx='38' cy='44' rx='4' ry='6' transform='rotate(30 38 44)'/></g></g>",
+	2: "<g stroke='#2f5a1c' stroke-width='2' fill='none'><path d='M30 58 C30 40 30 26 40 14'/><path d='M30 58 C26 44 20 36 14 30'/><path d='M30 58 C34 46 42 40 50 38'/></g><g fill='#f7f3e0' stroke='#7a6a3a' stroke-width='1.5'><ellipse cx='42' cy='14' rx='3' ry='5'/><ellipse cx='38' cy='21' rx='3' ry='5'/><ellipse cx='45' cy='22' rx='3' ry='5'/><ellipse cx='14' cy='27' rx='3' ry='5'/><ellipse cx='19' cy='32' rx='3' ry='5'/><ellipse cx='50' cy='34' rx='3' ry='5'/><ellipse cx='45' cy='39' rx='3' ry='5'/></g>",
+	3: "<path d='M32 10 C40 6 48 10 50 16 C42 18 36 16 32 10 Z' fill='#4f9a3a' stroke='#245018' stroke-width='2'/><path d='M32 10 L32 20' stroke='#5a3a1a' stroke-width='2'/><g fill='#b0305e' stroke='#5a1030' stroke-width='2'><circle cx='26' cy='28' r='8'/><circle cx='40' cy='28' r='8'/><circle cx='33' cy='40' r='8'/><circle cx='21' cy='42' r='7'/><circle cx='45' cy='42' r='7'/><circle cx='33' cy='53' r='6'/></g><g fill='#f2b6cf'><circle cx='23' cy='25' r='2'/><circle cx='37' cy='25' r='2'/><circle cx='30' cy='37' r='2'/></g>",
+	4: "<path d='M8 32 C18 16 40 16 50 32 C40 48 18 48 8 32 Z' fill='#4aa3e0' stroke='#1c4f78' stroke-width='2.5'/><path d='M48 32 L60 20 L60 44 Z' fill='#4aa3e0' stroke='#1c4f78' stroke-width='2.5'/><circle cx='18' cy='29' r='3' fill='#10263a'/><path d='M26 24 C30 30 30 34 26 40' fill='none' stroke='#1c4f78' stroke-width='2'/>",
+	5: "<path d='M32 54 L10 30 C12 14 52 14 54 30 Z' fill='#f2a693' stroke='#8a3f2f' stroke-width='2.5'/><g stroke='#8a3f2f' stroke-width='2' fill='none'><path d='M32 54 L20 22'/><path d='M32 54 L32 18'/><path d='M32 54 L44 22'/><path d='M32 54 L13 28'/><path d='M32 54 L51 28'/></g><path d='M24 54 L40 54 L36 60 L28 60 Z' fill='#e48a76' stroke='#8a3f2f' stroke-width='2'/>",
+}
+
+
+func _res_icon(r: int) -> Texture2D:
+	if _res_tex.has(r):
+		return _res_tex[r]
+	var svg: String = "<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'>" \
+		+ "<circle cx='32' cy='34' r='29' fill='#fff8e6' fill-opacity='0.82' stroke='#3a2a14' stroke-width='2.5'/>" \
+		+ RES_SVG[r] + "</svg>"
+	var img := Image.new()
+	img.load_svg_from_string(svg, 2.0)
+	img.generate_mipmaps()
+	var t := ImageTexture.create_from_image(img)
+	_res_tex[r] = t
+	return t
 
 ## 체력 막대 그림: 칸 하나가 체력 1. 남은 체력은 초록, 잃은 체력은 빨강, 위에서부터 잃는다.
 func _hp_texture(hp: int, full: int) -> ImageTexture:
@@ -343,7 +367,7 @@ func _sync_marks(full: bool = false) -> void:
 		if not alive.has(id):
 			_unit_nodes[id].queue_free()
 			_unit_nodes.erase(id)
-	# 채집 식량
+	# 채집 식량: 칸 가운데에 그림으로만 보여 준다 (남은 양은 칸을 클릭하면 오른쪽 정보 창에)
 	for i in gen.n:
 		var r: int = rules.res_kind[i]
 		if r == GameRules.Res.NONE:
@@ -351,25 +375,24 @@ func _sync_marks(full: bool = false) -> void:
 		var amt: int = rules.res_amt[i]
 		var entry: Array = _res_nodes.get(i, [])
 		if entry.is_empty():
-			var node := Node3D.new()
-			var mi := MeshInstance3D.new()
-			mi.mesh = _res_mesh
-			mi.material_override = _mat(GameRules.RES_COLORS[r])
-			mi.visibility_range_end = 0.9
-			node.add_child(mi)
-			var lbl := _label("", GameRules.RES_COLORS[r].lightened(0.3), 22, 0.3)
-			lbl.position = Vector3(0, hs.spacing * 0.12, 0)
-			node.add_child(lbl)
+			var icon := Sprite3D.new()
+			icon.texture = _res_icon(r)
+			icon.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+			icon.pixel_size = hs.spacing * 0.34 / 128.0
+			icon.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
+			icon.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+			icon.shaded = false
+			icon.visibility_range_end = 0.9
 			var tf: Transform3D = _frame(_ground(i))
-			tf.origin += (tf.basis.x * 0.3 - tf.basis.z * 0.3) * hs.spacing
-			node.transform = tf
-			marks.add_child(node)
-			entry = [node, lbl, mi, -1]
+			icon.position = tf.origin + tf.basis.y * hs.spacing * 0.18
+			marks.add_child(icon)
+			entry = [icon, -1]
 			_res_nodes[i] = entry
-		if entry[3] != amt or full:
-			entry[3] = amt
-			(entry[1] as Label3D).text = "%s %d" % [GameRules.RES_SHORT[r], amt] if amt > 0 else "%s (고갈)" % GameRules.RES_SHORT[r]
-			(entry[2] as MeshInstance3D).transparency = 0.0 if amt > 0 else 0.6
+		if entry[1] != amt or full:
+			entry[1] = amt
+			# 다 쓴 자원은 흐리게
+			(entry[0] as Sprite3D).modulate = Color(1, 1, 1, 1) if amt > 0 else Color(0.6, 0.6, 0.6, 0.45)
+			(entry[0] as Sprite3D).alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD if amt > 0 else SpriteBase3D.ALPHA_CUT_DISABLED
 	# 야영지와 부족민이 있는 칸: 이름표 하나에 모아 쓴다 (겹치지 않게)
 	var tags := {}
 	for c in rules.camps:
@@ -391,15 +414,10 @@ func _sync_marks(full: bool = false) -> void:
 				line += " · 식량 %d" % carry
 			tags[t].append(line)
 		var r2: int = rules.res_kind[t]
-		if r2 != GameRules.Res.NONE:
-			tags[t].append("%s %d" % [GameRules.RES_SHORT[r2], rules.res_amt[t]])
-			(_res_nodes[t][1] as Label3D).set_meta("on", false)
 	for t in _tag_nodes.keys():
 		if not tags.has(t):
 			_tag_nodes[t].queue_free()
 			_tag_nodes.erase(t)
-			if _res_nodes.has(t):
-				(_res_nodes[t][1] as Label3D).set_meta("on", true)
 	for t in tags:
 		var lbl: Label3D = _tag_nodes.get(t)
 		if lbl == null:
@@ -841,6 +859,12 @@ func _on_left_click(t: int) -> void:
 	else:
 		sel_unit = null
 		sel_camp = null
+		# 빈 칸을 누르면 그 칸 정보를 오른쪽 창에 고정한다 (한 번 더 누르면 풀림)
+		selected = -1 if selected == t else t
+		_draw_selection()
+		_refresh_hud()
+		return
+	selected = -1
 	_draw_selection()
 	_refresh_hud()
 
@@ -905,7 +929,7 @@ func _update_info() -> void:
 	super._update_info()
 	if rules == null:
 		return
-	var i: int = hover
+	var i: int = selected if selected >= 0 else hover
 	if i < 0:
 		return
 	var lines: Array = []
