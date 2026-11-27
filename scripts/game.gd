@@ -2,7 +2,8 @@ extends "res://scripts/main.gd"
 ## 게임: 채집 → 인구 상승 → 사냥 → 인구 상승 순환을 직접 해 보는 화면.
 ## 행성, 카메라, 타일 정보는 맵 테스트(main.gd)의 것을 그대로 쓰고, 그 위에 유닛과 야영지를 얹는다.
 
-const R := preload("res://scripts/game_rules.gd")
+## class_name 대신 preload: 에디터가 전역 클래스 목록을 아직 갱신하지 않은 PC 에서도 바로 실행되도록
+const GameRules := preload("res://scripts/game_rules.gd")
 
 var rules: GameRules
 var marks := Node3D.new()
@@ -467,7 +468,7 @@ func _setup_ui() -> void:
 	var row := HBoxContainer.new()
 	row.add_child(_button("턴 종료 (Enter)", _end_turn))
 	row.add_child(_button("다음 부족민 (N)", _select_next))
-	row.add_child(_button("메뉴", _to_menu))
+	row.add_child(_button("처음 화면 (Esc)", _to_menu))
 	lv.add_child(row)
 	lv.add_child(HSeparator.new())
 	log_lbl.bbcode_enabled = true
