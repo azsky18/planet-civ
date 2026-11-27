@@ -672,7 +672,7 @@ func _refresh_selection() -> void:
 		t.append("공/방/이동 %s · 체력 %d/%d · 들고 있는 식량 %d/%d" % [stat_text(u), u.hp, u.info()["hp"], u.carry, GameRules.CARRY_MAX])
 		var gt: int = rules.gather_target(u)
 		if gt >= 0:
-			t.append("채집 가능: %s (남은 양 %d)" % [GameRules.RES_NAMES[rules.res_kind[gt]], rules.res_amt[gt]])
+			t.append("채집 가능: %s (식량 %d, 한 번에 모두 거둠)" % [GameRules.RES_NAMES[rules.res_kind[gt]], rules.res_amt[gt]])
 		if not u.path.is_empty():
 			t.append("목적지까지 %d칸 남음 (턴마다 이어서 이동)" % u.path.size())
 		sel_body.text = "\n".join(t)
@@ -951,7 +951,10 @@ func _update_info() -> void:
 		lines.append("부족민 %d명" % ps.size())
 	var r: int = rules.res_kind[i]
 	if r != GameRules.Res.NONE:
-		lines.append("[b]채집 식량[/b]  %s %d/%d" % [GameRules.RES_NAMES[r], rules.res_amt[i], GameRules.RES_MAX[r]])
+		if rules.res_amt[i] > 0:
+			lines.append("[b]채집 식량[/b]  %s, 거두면 식량 %d" % [GameRules.RES_NAMES[r], rules.res_amt[i]])
+		else:
+			lines.append("[b]채집 식량[/b]  %s, 다 거둠 (%d턴 뒤 다시 자람)" % [GameRules.RES_NAMES[r], rules.res_wait[i]])
 	if lines.is_empty():
 		return
 	info_lbl.text = "\n".join(lines) + "\n\n" + info_lbl.text

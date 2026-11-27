@@ -53,25 +53,38 @@ func _init() -> void:
 	check(gr.population() == 2, "설치해도 총 인구 그대로 (유닛 1 = 인구 1)")
 	check(gr.camp_block_reason(b) != "", "같은 칸에 또 설치 불가")
 
-	# 채집: 가까운 식량 칸으로 가서 모아 오기
-	var res_tile: int = -1
-	var near: Dictionary = gr.within(camp.tile, 2)
-	for j in near:
-		if gr.is_land(j) and gr.res_kind[j] != GameRules.Res.NONE and j != camp.tile:
-			res_tile = j
-			break
-	check(res_tile >= 0, "야영지 둘레 2칸 안에 땅 위 식량 자원")
+	# 순환 점검이 포식자 운에 좌우되지 않게 포식자를 치운다
+	for u in gr.units.duplicate():
+		if u.side() == GameRules.Side.PREDATOR:
+			gr.remove_unit(u)
+	gr.animal_target = gr.count_animals()
+	# 채집: 가까운 식량 칸을 돌며 거두고 야영지로 가져오기 (한 곳은 한 번에 다 거둠)
 	var gathered: int = 0
 	var turns: int = 0
 	var grew := false
-	while turns < 40:
+	var once_checked := false
+	var target: int = -1
+	while turns < 60:
 		turns += 1
-		if b.tile != res_tile and b.carry < 6:
-			gr.order_move(b, res_tile)
-		elif b.tile == res_tile and b.carry < 6:
-			gathered += gr.gather(b)
-		else:
+		if b.carry >= 5:
 			gr.order_move(b, camp.tile)
+		else:
+			if target < 0 or gr.res_amt[target] == 0:
+				target = -1
+				var area: Dictionary = gr.within(camp.tile, 5)
+				for j in area:
+					if gr.is_land(j) and gr.res_kind[j] != GameRules.Res.NONE and gr.res_amt[j] > 0:
+						if target < 0 or area[j] < area[target]:
+							target = j
+			if target >= 0 and b.tile == target:
+				var got: int = gr.gather(b)
+				gathered += got
+				if not once_checked:
+					once_checked = true
+					check(got == GameRules.RES_MAX[gr.res_kind[target]] and gr.res_amt[target] == 0, "한 번 채집으로 그 자리를 다 거둠")
+					check(gr.gather_block_reason(b) != "", "다 거둔 자리는 다시 채집 불가")
+			elif target >= 0:
+				gr.order_move(b, target)
 		gr.end_turn()
 		if not gr.units.has(b):
 			print("부족민이 쓰러짐 (턴 %d)" % turns)
