@@ -68,38 +68,41 @@ void fragment() {
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_override("font", font_title)
 	title.add_theme_font_size_override("font_size", 54)
-	title.add_theme_color_override("font_color", Color("e8c872"))
+	title.add_theme_color_override("font_color", Color("c9a75a"))
 	box.add_child(title)
 	var sub := Label.new()
 	sub.text = "수렵채집 시대 시제품"
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sub.add_theme_font_override("font", font_body)
 	sub.add_theme_font_size_override("font_size", 16)
-	sub.add_theme_color_override("font_color", Color("b9a67c"))
+	sub.add_theme_color_override("font_color", Color("9a917e"))
 	box.add_child(sub)
 	var gap := Control.new()
 	gap.custom_minimum_size = Vector2(0, 18)
 	box.add_child(gap)
 
 	var btn := StyleBoxFlat.new()
-	btn.bg_color = Color(0.35, 0.25, 0.13, 0.92)
-	btn.border_color = Color("c9a24a")
-	btn.set_border_width_all(2)
-	btn.set_corner_radius_all(4)
-	btn.set_content_margin_all(12)
+	btn.bg_color = Color(0.075, 0.085, 0.10, 0.82)
+	btn.border_color = Color(0.79, 0.65, 0.35, 0.45)
+	btn.set_border_width_all(1)
+	btn.set_corner_radius_all(2)
+	btn.set_content_margin_all(11)
 	var btn_h := btn.duplicate() as StyleBoxFlat
-	btn_h.bg_color = Color(0.47, 0.34, 0.18, 0.95)
+	btn_h.bg_color = Color(0.13, 0.145, 0.165, 0.92)
+	btn_h.border_color = Color("c9a75a")
 	var items := [["게임 시작", "res://game.tscn"], ["맵 테스트", "res://map_test.tscn"], ["종료", ""]]
 	for it in items:
 		var b := Button.new()
 		b.text = it[0]
 		b.add_theme_font_override("font", font_body)
-		b.add_theme_font_size_override("font_size", 22)
+		b.add_theme_font_size_override("font_size", 19)
 		b.add_theme_stylebox_override("normal", btn)
 		b.add_theme_stylebox_override("hover", btn_h)
 		b.add_theme_stylebox_override("pressed", btn_h)
-		b.add_theme_stylebox_override("focus", btn_h)
-		b.add_theme_color_override("font_color", Color("f5e9c8"))
+		b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+		b.add_theme_color_override("font_color", Color("e4dccb"))
+		b.add_theme_color_override("font_hover_color", Color("fff6e0"))
+		b.focus_mode = Control.FOCUS_NONE
 		var path: String = it[1]
 		if path == "":
 			b.pressed.connect(func(): get_tree().quit())
@@ -111,7 +114,7 @@ void fragment() {
 	build.text = "빌드: " + BUILD_SCRIPT.BUILD
 	build.add_theme_font_override("font", font_body)
 	build.add_theme_font_size_override("font_size", 12)
-	build.add_theme_color_override("font_color", Color("7f7458"))
+	build.add_theme_color_override("font_color", Color("6f6a60"))
 	build.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	build.position = Vector2(16, -30)
 	add_child(build)

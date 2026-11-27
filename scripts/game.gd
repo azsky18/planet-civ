@@ -33,6 +33,7 @@ var sel_body := RichTextLabel.new()
 var sel_buttons := HBoxContainer.new()
 var msg_lbl := Label.new()
 var over_lbl := Label.new()
+var help_panel: PanelContainer
 
 
 func _ready() -> void:
@@ -517,29 +518,7 @@ func _draw_selection() -> void:
 # ---------------------------------------------------------------- HUD
 
 func _setup_ui() -> void:
-	var theme := Theme.new()
-	theme.default_font = font_body
-	theme.default_font_size = 14
-	theme.set_color("font_color", "Label", Color("efe3c4"))
-	theme.set_color("default_color", "RichTextLabel", Color("efe3c4"))
-	var btn := StyleBoxFlat.new()
-	btn.bg_color = Color("5a3f22")
-	btn.border_color = Color("c9a24a")
-	btn.set_border_width_all(1)
-	btn.set_corner_radius_all(3)
-	btn.set_content_margin_all(6)
-	var btn_h := btn.duplicate() as StyleBoxFlat
-	btn_h.bg_color = Color("74532d")
-	var btn_d := btn.duplicate() as StyleBoxFlat
-	btn_d.bg_color = Color("3a2c1e")
-	btn_d.border_color = Color("6a5530")
-	theme.set_stylebox("normal", "Button", btn)
-	theme.set_stylebox("hover", "Button", btn_h)
-	theme.set_stylebox("pressed", "Button", btn_h)
-	theme.set_stylebox("disabled", "Button", btn_d)
-	theme.set_color("font_color", "Button", Color("f5e9c8"))
-	theme.set_color("font_hover_color", "Button", Color("ffffff"))
-	theme.set_color("font_disabled_color", "Button", Color("8a7a5c"))
+	var theme := make_ui_theme()
 
 	var layer := CanvasLayer.new()
 	add_child(layer)
@@ -549,104 +528,193 @@ func _setup_ui() -> void:
 	root.theme = theme
 	layer.add_child(root)
 
-	# 왼쪽 위: 턴과 부족 현황, 사건 기록
+	# 위: 한 줄 상단 막대 (시대·턴, 부족 인구, 조작법, 처음 화면)
+	var top := PanelContainer.new()
+	var tsb := _panel_style(0.92)
+	tsb.set_border_width_all(0)
+	tsb.border_width_bottom = 1
+	tsb.set_corner_radius_all(0)
+	tsb.content_margin_top = 6
+	tsb.content_margin_bottom = 6
+	tsb.shadow_size = 0
+	top.add_theme_stylebox_override("panel", tsb)
+	top.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	root.add_child(top)
+	var tr := HBoxContainer.new()
+	tr.add_theme_constant_override("separation", 18)
+	top.add_child(tr)
+	turn_lbl.add_theme_font_override("font", font_title)
+	turn_lbl.add_theme_font_size_override("font_size", 18)
+	turn_lbl.add_theme_color_override("font_color", UI_GOLD)
+	tr.add_child(turn_lbl)
+	var bar := VSeparator.new()
+	tr.add_child(bar)
+	pop_lbl.add_theme_font_size_override("font_size", 13)
+	pop_lbl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	tr.add_child(pop_lbl)
+	var fill := Control.new()
+	fill.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tr.add_child(fill)
+	tr.add_child(_button("조작법 (F1)", _toggle_help))
+	tr.add_child(_button("처음 화면 (Esc)", _to_menu))
+
+	# 왼쪽 위: 사건 기록 (반투명, 틀 없이)
 	var left := PanelContainer.new()
-	left.add_theme_stylebox_override("panel", _panel_style())
-	left.position = Vector2(14, 14)
-	left.custom_minimum_size = Vector2(330, 0)
+	var lsb := _panel_style(0.62)
+	lsb.border_color = Color(UI_LINE.r, UI_LINE.g, UI_LINE.b, 0.18)
+	left.add_theme_stylebox_override("panel", lsb)
+	left.position = Vector2(12, 56)
+	left.custom_minimum_size = Vector2(320, 0)
+	left.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(left)
 	var lv := VBoxContainer.new()
 	lv.add_theme_constant_override("separation", 6)
 	left.add_child(lv)
-	turn_lbl.add_theme_font_override("font", font_title)
-	turn_lbl.add_theme_font_size_override("font_size", 22)
-	turn_lbl.add_theme_color_override("font_color", Color("e8c872"))
-	lv.add_child(turn_lbl)
-	pop_lbl.add_theme_font_size_override("font_size", 13)
-	lv.add_child(pop_lbl)
-	var row := HBoxContainer.new()
-	row.add_child(_button("턴 종료 (Enter)", _end_turn))
-	row.add_child(_button("다음 부족민 (N)", _select_next))
-	row.add_child(_button("처음 화면 (Esc)", _to_menu))
-	lv.add_child(row)
-	lv.add_child(HSeparator.new())
+	var lt := Label.new()
+	lt.text = "사건 기록"
+	lt.add_theme_font_size_override("font_size", 11)
+	lt.add_theme_color_override("font_color", UI_MUTED)
+	lv.add_child(lt)
 	log_lbl.bbcode_enabled = true
 	log_lbl.fit_content = true
 	log_lbl.scroll_active = false
-	log_lbl.custom_minimum_size = Vector2(306, 0)
+	log_lbl.custom_minimum_size = Vector2(292, 0)
+	log_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	log_lbl.add_theme_font_size_override("normal_font_size", 12)
+	log_lbl.add_theme_constant_override("line_separation", 2)
 	lv.add_child(log_lbl)
 	var sub := Label.new()
 	sub.text = "빌드: " + BUILD
-	sub.add_theme_font_size_override("font_size", 11)
-	sub.add_theme_color_override("font_color", Color("9f906c"))
+	sub.add_theme_font_size_override("font_size", 10)
+	sub.add_theme_color_override("font_color", Color(UI_MUTED.r, UI_MUTED.g, UI_MUTED.b, 0.7))
 	lv.add_child(sub)
 
 	# 오른쪽 위: 타일 정보
 	var right := PanelContainer.new()
 	right.add_theme_stylebox_override("panel", _panel_style())
 	right.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	right.position = Vector2(-14 - 300, 14)
+	right.offset_left = -12 - 300
+	right.offset_right = -12
+	right.offset_top = 56
+	right.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	right.custom_minimum_size = Vector2(300, 0)
 	root.add_child(right)
 	info_lbl.bbcode_enabled = true
 	info_lbl.fit_content = true
 	info_lbl.scroll_active = false
-	info_lbl.custom_minimum_size = Vector2(276, 0)
+	info_lbl.custom_minimum_size = Vector2(272, 0)
 	info_lbl.add_theme_font_override("bold_font", load("res://fonts/NanumGothic-Bold.ttf"))
 	right.add_child(info_lbl)
 
-	# 아래 가운데: 고른 부족민 / 야영지
+	# 왼쪽 아래: 고른 부족민 / 야영지 카드
 	var bottom := PanelContainer.new()
-	bottom.add_theme_stylebox_override("panel", _panel_style())
-	bottom.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	bottom.custom_minimum_size = Vector2(560, 0)
-	bottom.offset_left = -280
-	bottom.offset_right = 280
-	bottom.offset_top = -60
-	bottom.offset_bottom = -60
+	var bsb := _panel_style(0.94)
+	bsb.border_width_top = 2
+	bsb.border_color = UI_LINE
+	bottom.add_theme_stylebox_override("panel", bsb)
+	bottom.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	bottom.offset_left = 12
+	bottom.offset_bottom = -12
+	bottom.offset_top = -12
 	bottom.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	bottom.custom_minimum_size = Vector2(500, 0)
 	root.add_child(bottom)
 	var bv := VBoxContainer.new()
-	bv.add_theme_constant_override("separation", 6)
+	bv.add_theme_constant_override("separation", 7)
 	bottom.add_child(bv)
 	sel_title.add_theme_font_override("font", font_title)
 	sel_title.add_theme_font_size_override("font_size", 18)
-	sel_title.add_theme_color_override("font_color", Color("e8c872"))
+	sel_title.add_theme_color_override("font_color", UI_GOLD)
 	bv.add_child(sel_title)
+	bv.add_child(HSeparator.new())
 	sel_body.bbcode_enabled = true
 	sel_body.fit_content = true
 	sel_body.scroll_active = false
-	sel_body.custom_minimum_size = Vector2(536, 0)
+	sel_body.custom_minimum_size = Vector2(472, 0)
 	bv.add_child(sel_body)
+	sel_buttons.add_theme_constant_override("separation", 6)
 	bv.add_child(sel_buttons)
 	msg_lbl.add_theme_font_size_override("font_size", 12)
-	msg_lbl.add_theme_color_override("font_color", Color("ffd27a"))
+	msg_lbl.add_theme_color_override("font_color", Color("d9b46a"))
 	msg_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	msg_lbl.custom_minimum_size = Vector2(536, 0)
+	msg_lbl.custom_minimum_size = Vector2(472, 0)
 	bv.add_child(msg_lbl)
 
-	var help := Label.new()
-	help.text = "왼쪽 클릭: 고르기   오른쪽 클릭: 이동 / 곁의 동물 공격   B 야영지 세우기  G 채집  J 합류  U 부족민 내보내기  N 다음  Space 쉬기  Enter 턴 종료\n드래그: 회전   휠: 확대/축소   Q/E: 시점 돌리기   C: 고른 곳으로   Esc: 메뉴"
-	help.add_theme_font_size_override("font_size", 12)
-	help.add_theme_color_override("font_color", Color("cdbf9c"))
-	var hsb := StyleBoxFlat.new()
-	hsb.bg_color = Color(0.08, 0.06, 0.04, 0.78)
-	hsb.set_content_margin_all(6)
-	help.add_theme_stylebox_override("normal", hsb)
-	help.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	help.offset_top = -46
-	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	root.add_child(help)
+	# 오른쪽 아래: 다음 부족민, 턴 종료
+	var br := VBoxContainer.new()
+	br.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	br.offset_right = -16
+	br.offset_bottom = -16
+	br.offset_left = -16 - 210
+	br.offset_top = -16
+	br.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	br.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	br.add_theme_constant_override("separation", 8)
+	root.add_child(br)
+	var nb := _button("다음 부족민 (N)", _select_next)
+	nb.custom_minimum_size = Vector2(210, 30)
+	br.add_child(nb)
+	var eb := _button("턴 종료  ⏎", _end_turn, true, "Enter")
+	eb.custom_minimum_size = Vector2(210, 54)
+	eb.add_theme_font_override("font", font_title)
+	eb.add_theme_font_size_override("font_size", 20)
+	eb.add_theme_color_override("font_color", Color("f1e2bd"))
+	eb.add_theme_stylebox_override("normal", _flat(Color("2a2418"), UI_GOLD, 2))
+	eb.add_theme_stylebox_override("hover", _flat(Color("3a3120"), Color("e6c47a"), 2))
+	eb.add_theme_stylebox_override("pressed", _flat(Color("1c1810"), UI_GOLD, 2))
+	br.add_child(eb)
+
+	# 조작법: F1 로 여닫는 판
+	help_panel = PanelContainer.new()
+	help_panel.add_theme_stylebox_override("panel", _panel_style(0.95))
+	help_panel.set_anchors_preset(Control.PRESET_CENTER)
+	help_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	help_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	help_panel.visible = false
+	root.add_child(help_panel)
+	var hv := VBoxContainer.new()
+	hv.add_theme_constant_override("separation", 8)
+	help_panel.add_child(hv)
+	var ht := Label.new()
+	ht.text = "조작법"
+	ht.add_theme_font_override("font", font_title)
+	ht.add_theme_font_size_override("font_size", 20)
+	ht.add_theme_color_override("font_color", UI_GOLD)
+	hv.add_child(ht)
+	hv.add_child(HSeparator.new())
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 24)
+	grid.add_theme_constant_override("v_separation", 5)
+	hv.add_child(grid)
+	for pair in [["왼쪽 클릭", "부족민·야영지·칸 고르기"], ["오른쪽 클릭", "이동, 곁의 동물 공격"],
+			["B", "야영지 세우기"], ["G", "채집"], ["J", "야영지에 합류"], ["U", "부족민 내보내기"],
+			["N / Tab", "다음 부족민"], ["Space", "이번 턴 쉬기"], ["Enter", "턴 종료"],
+			["드래그 / 휠", "회전 / 확대·축소"], ["Q / E", "시점 돌리기"], ["C", "고른 곳으로 시점 이동"],
+			["F1", "이 창 여닫기"], ["Esc", "처음 화면"]]:
+		var k := Label.new()
+		k.text = pair[0]
+		k.add_theme_color_override("font_color", UI_GOLD)
+		grid.add_child(k)
+		var v := Label.new()
+		v.text = pair[1]
+		grid.add_child(v)
 
 	over_lbl.add_theme_font_override("font", font_title)
 	over_lbl.add_theme_font_size_override("font_size", 40)
-	over_lbl.add_theme_color_override("font_color", Color("e8c872"))
+	over_lbl.add_theme_color_override("font_color", UI_GOLD)
+	over_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+	over_lbl.add_theme_constant_override("outline_size", 6)
 	over_lbl.set_anchors_preset(Control.PRESET_CENTER)
 	over_lbl.position = Vector2(-200, -60)
 	over_lbl.visible = false
 	root.add_child(over_lbl)
 	_update_info()
+
+
+func _toggle_help() -> void:
+	help_panel.visible = not help_panel.visible
 
 
 func _button(text: String, cb: Callable, enabled: bool = true, tip: String = "") -> Button:
@@ -671,7 +739,7 @@ func _refresh_hud() -> void:
 	var lines: Array = []
 	for e in rules.events.slice(-9):
 		lines.append(e)
-	log_lbl.text = "[color=#c9b98f]" + "\n".join(lines) + "[/color]"
+	log_lbl.text = "[color=#c8c0ad]" + "\n".join(lines) + "[/color]"
 	over_lbl.visible = rules.game_over
 	over_lbl.text = "부족이 모두 사라졌습니다"
 	_refresh_selection()
@@ -709,7 +777,7 @@ func _refresh_selection() -> void:
 		var t2: Array = []
 		t2.append("식량 창고 %d/%d · 턴당 %+d (일하는 칸 %d곳, 모닥불 +%d, 먹는 양 -%d)" % [c.food, GameRules.growth_need(c.pop), net, rules.camp_worked(c).size(), GameRules.CAMP_BONUS, GameRules.FOOD_PER_POP * c.pop])
 		if c.pop >= GameRules.CAMP_MAX_POP:
-			t2.append("[color=#ffb37a]인구가 가득 찼습니다. 부족민을 내보내 사냥과 채집을 보내세요.[/color]")
+			t2.append("[color=#d9a066]인구가 가득 찼습니다. 부족민을 내보내 사냥과 채집을 보내세요.[/color]")
 		else:
 			t2.append("부족민이 식량을 들고 들어오면 창고에 쌓이고, 창고가 차면 턴이 끝날 때 인구가 1 늡니다.")
 		sel_body.text = "\n".join(t2)
@@ -930,8 +998,13 @@ func _unhandled_input(event: InputEvent) -> void:
 					_look_at_tile(sel_unit.tile)
 				elif sel_camp != null:
 					_look_at_tile(sel_camp.tile)
+			KEY_F1:
+				_toggle_help()
 			KEY_ESCAPE:
-				_to_menu()
+				if help_panel.visible:
+					help_panel.visible = false
+				else:
+					_to_menu()
 			KEY_R:
 				super._unhandled_input(event)
 
@@ -954,16 +1027,16 @@ func _update_info() -> void:
 	var a: GameRules.Unit = rules.animal_at(i)
 	if a != null:
 		var kind: String = "먹잇감" if a.side() == GameRules.Side.PREY else "포식자, 곁에 오면 덮침"
-		lines.append("[color=#e8c872][font_size=17]%s[/font_size][/color]  [color=#9f906c](%s)[/color]" % [a.name(), kind])
+		lines.append("[color=#c9a75a][font_size=17]%s[/font_size][/color]  [color=#9a917e](%s)[/color]" % [a.name(), kind])
 		lines.append("공/방/이동 %s · 체력 %d/%d · 고기 %d" % [stat_text(a), a.hp, a.info()["hp"], a.info()["food"]])
-		lines.append("[color=#9f906c]이 칸의 방어 보정 ×%.2f[/color]" % rules.terrain_defense(i))
+		lines.append("[color=#9a917e]이 칸의 방어 보정 ×%.2f[/color]" % rules.terrain_defense(i))
 		if sel_unit != null and rules.units.has(sel_unit):
 			var odds: float = rules.attack_odds(sel_unit, a)
 			var near: String = "" if rules.is_adjacent(sel_unit.tile, i) else " (곁으로 가야 공격 가능)"
 			lines.append("[b]공격 승률[/b] %d%%%s" % [int(round(odds * 100.0)), near])
 	var c: GameRules.Camp = rules.camp_at(i)
 	if c != null:
-		lines.append("[color=#e8c872][font_size=17]%s[/font_size][/color]  인구 %d/%d, 식량 %d/%d" % [c.name, c.pop, GameRules.CAMP_MAX_POP, c.food, GameRules.growth_need(c.pop)])
+		lines.append("[color=#c9a75a][font_size=17]%s[/font_size][/color]  인구 %d/%d, 식량 %d/%d" % [c.name, c.pop, GameRules.CAMP_MAX_POP, c.food, GameRules.growth_need(c.pop)])
 	var ps: Array = rules.players_at(i)
 	if not ps.is_empty():
 		lines.append("부족민 %d명" % ps.size())

@@ -5,7 +5,7 @@ const LEVELS := [5, 6, 7]
 const LEVEL_LABELS := ["작게 (10,242칸)", "보통 (40,962칸)", "크게 (163,842칸, 느림)"]
 const MODE_LABELS := ["지형", "고도", "기온", "강수량", "판 구조", "기압과 바람", "식생"]
 ## 화면에 표시되는 빌드 이름. PC에서 어떤 버전이 실행 중인지 확인하는 용도.
-const BUILD := "v8.7 채집 자원 그림 새로 그림 (밀, 쌀, 열매, 물고기, 조개)"
+const BUILD := "v8.8 UI 전반 정리 (상단 막대, 유닛 카드, 턴 종료 버튼, F1 조작법)"
 const COMPASS := ["북", "북동", "동", "남동", "남", "남서", "서", "북서"]
 
 var hs := HexSphere.new()
@@ -168,46 +168,77 @@ func _add_stars() -> void:
 
 # ---------------------------------------------------------------- UI
 
-func _panel_style() -> StyleBoxFlat:
+## UI 색 (차분한 전략 게임 느낌: 짙은 회청색 판, 가는 금색 선, 상아색 글자)
+const UI_TEXT := Color("e4dccb")
+const UI_MUTED := Color("9a917e")
+const UI_GOLD := Color("c9a75a")
+const UI_BG := Color(0.075, 0.085, 0.10, 0.9)
+const UI_LINE := Color(0.79, 0.65, 0.35, 0.45)
+
+
+func _panel_style(alpha: float = 0.9) -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.13, 0.09, 0.06, 0.9)
-	sb.border_color = Color("b48d43")
-	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(4)
-	sb.set_content_margin_all(12)
-	sb.shadow_color = Color(0, 0, 0, 0.5)
-	sb.shadow_size = 6
+	sb.bg_color = Color(UI_BG.r, UI_BG.g, UI_BG.b, alpha)
+	sb.border_color = UI_LINE
+	sb.set_border_width_all(1)
+	sb.set_corner_radius_all(2)
+	sb.content_margin_left = 14
+	sb.content_margin_right = 14
+	sb.content_margin_top = 10
+	sb.content_margin_bottom = 10
+	sb.shadow_color = Color(0, 0, 0, 0.35)
+	sb.shadow_size = 4
 	return sb
 
 
-func _setup_ui() -> void:
+func _flat(bg: Color, line: Color, width: int = 1) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = bg
+	sb.border_color = line
+	sb.set_border_width_all(width)
+	sb.set_corner_radius_all(2)
+	sb.content_margin_left = 10
+	sb.content_margin_right = 10
+	sb.content_margin_top = 5
+	sb.content_margin_bottom = 5
+	return sb
+
+
+## 맵 테스트와 게임 화면이 함께 쓰는 UI 테마
+func make_ui_theme() -> Theme:
 	var theme := Theme.new()
 	theme.default_font = font_body
-	theme.default_font_size = 14
-	theme.set_color("font_color", "Label", Color("efe3c4"))
-	theme.set_color("font_color", "CheckBox", Color("efe3c4"))
-	theme.set_color("default_color", "RichTextLabel", Color("efe3c4"))
-	var btn := StyleBoxFlat.new()
-	btn.bg_color = Color("5a3f22")
-	btn.border_color = Color("c9a24a")
-	btn.set_border_width_all(1)
-	btn.set_corner_radius_all(3)
-	btn.set_content_margin_all(6)
-	var btn_h := btn.duplicate() as StyleBoxFlat
-	btn_h.bg_color = Color("74532d")
+	theme.default_font_size = 13
+	for t in ["Label", "CheckBox"]:
+		theme.set_color("font_color", t, UI_TEXT)
+	theme.set_color("default_color", "RichTextLabel", UI_TEXT)
+	var normal := _flat(Color("1f2328"), Color(0.55, 0.48, 0.33, 0.7))
+	var hover := _flat(Color("2b3036"), UI_GOLD)
+	var pressed := _flat(Color("171a1e"), UI_GOLD)
+	var disabled := _flat(Color(0.1, 0.11, 0.12, 0.8), Color(0.3, 0.29, 0.26, 0.6))
 	for t in ["Button", "OptionButton"]:
-		theme.set_stylebox("normal", t, btn)
-		theme.set_stylebox("hover", t, btn_h)
-		theme.set_stylebox("pressed", t, btn_h)
-		theme.set_color("font_color", t, Color("f5e9c8"))
-		theme.set_color("font_hover_color", t, Color("ffffff"))
-	var le := StyleBoxFlat.new()
-	le.bg_color = Color("1c140d")
-	le.border_color = Color("8a6a35")
-	le.set_border_width_all(1)
-	le.set_content_margin_all(6)
+		theme.set_stylebox("normal", t, normal)
+		theme.set_stylebox("hover", t, hover)
+		theme.set_stylebox("pressed", t, pressed)
+		theme.set_stylebox("disabled", t, disabled)
+		theme.set_stylebox("focus", t, StyleBoxEmpty.new())
+		theme.set_color("font_color", t, UI_TEXT)
+		theme.set_color("font_hover_color", t, Color("fff6e0"))
+		theme.set_color("font_pressed_color", t, UI_GOLD)
+		theme.set_color("font_disabled_color", t, Color("6b665c"))
+	var le := _flat(Color("101215"), Color(0.55, 0.48, 0.33, 0.6))
 	theme.set_stylebox("normal", "LineEdit", le)
-	theme.set_color("font_color", "LineEdit", Color("f5e9c8"))
+	theme.set_stylebox("focus", "LineEdit", _flat(Color("101215"), UI_GOLD))
+	theme.set_color("font_color", "LineEdit", UI_TEXT)
+	var sep := StyleBoxLine.new()
+	sep.color = Color(0.79, 0.65, 0.35, 0.25)
+	sep.thickness = 1
+	theme.set_stylebox("separator", "HSeparator", sep)
+	return theme
+
+
+func _setup_ui() -> void:
+	var theme := make_ui_theme()
 
 	var layer := CanvasLayer.new()
 	add_child(layer)
@@ -231,12 +262,12 @@ func _setup_ui() -> void:
 	title.text = "행성 지도 시제품"
 	title.add_theme_font_override("font", font_title)
 	title.add_theme_font_size_override("font_size", 24)
-	title.add_theme_color_override("font_color", Color("e8c872"))
+	title.add_theme_color_override("font_color", UI_GOLD)
 	lv.add_child(title)
 	var sub := Label.new()
 	sub.text = "판 구조, 대기 순환, 물의 흐름으로 만든 세계\n빌드: " + BUILD
 	sub.add_theme_font_size_override("font_size", 12)
-	sub.add_theme_color_override("font_color", Color("b9a67c"))
+	sub.add_theme_color_override("font_color", UI_MUTED)
 	lv.add_child(sub)
 	var menu_btn := Button.new()
 	menu_btn.text = "처음 화면으로 (Esc)"
@@ -275,7 +306,7 @@ func _setup_ui() -> void:
 	gen_btn.pressed.connect(_regenerate)
 	lv.add_child(gen_btn)
 	status_lbl.add_theme_font_size_override("font_size", 12)
-	status_lbl.add_theme_color_override("font_color", Color("b9a67c"))
+	status_lbl.add_theme_color_override("font_color", UI_MUTED)
 	lv.add_child(status_lbl)
 
 	lv.add_child(HSeparator.new())
@@ -320,7 +351,7 @@ func _setup_ui() -> void:
 	lv.add_child(HSeparator.new())
 	lv.add_child(legend_box)
 	stats_lbl.add_theme_font_size_override("font_size", 12)
-	stats_lbl.add_theme_color_override("font_color", Color("b9a67c"))
+	stats_lbl.add_theme_color_override("font_color", UI_MUTED)
 	stats_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	stats_lbl.custom_minimum_size = Vector2(260, 0)
 	lv.add_child(stats_lbl)
@@ -354,7 +385,7 @@ func _setup_ui() -> void:
 	var help := Label.new()
 	help.text = "드래그: 회전   휠: 확대/축소 (가까이 가면 비스듬한 시점)   클릭: 타일 고정   방향키: 이동   Q/E 또는 휠 버튼 드래그: 시점 돌리기   R: 북쪽 정렬\n고정한 타일에 시험: 1 벌목  2 배수  3 경작지  4 도로  5 정착지 구역  T 10턴 진행"
 	help.add_theme_font_size_override("font_size", 12)
-	help.add_theme_color_override("font_color", Color("9f906c"))
+	help.add_theme_color_override("font_color", UI_MUTED)
 	help.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	help.position = Vector2(16, -46)
 	root.add_child(help)
@@ -753,7 +784,7 @@ func _pick(mp: Vector2) -> void:
 func _update_info() -> void:
 	var i: int = selected if selected >= 0 else hover
 	if current_level < 0 or i < 0:
-		info_lbl.text = "[color=#e8c872][font_size=18]타일 정보[/font_size][/color]\n행성 위에 마우스를 올리면 그 칸의 지형, 기후, 물, 타일 레이어 정보를 보여 줍니다."
+		info_lbl.text = "[color=#c9a75a][font_size=18]타일 정보[/font_size][/color]\n행성 위에 마우스를 올리면 그 칸의 지형, 기후, 물, 타일 레이어 정보를 보여 줍니다."
 		return
 	view.set_hover(i)
 	var lat: float = rad_to_deg(gen.lat_of(i))
@@ -781,8 +812,8 @@ func _update_info() -> void:
 	elif gen.elevation[i] >= 0.0:
 		water = "없음"
 	var lines: Array = []
-	lines.append("[color=#e8c872][font_size=18]%s[/font_size][/color]%s" % [name_, "  [color=#9f906c](고정됨)[/color]" if selected >= 0 else ""])
-	lines.append("[color=#9f906c]위도 %.1f°%s, 경도 %.1f°%s, %s각형 칸[/color]" % [absf(lat), "N" if lat >= 0 else "S", absf(lon), "E" if lon >= 0 else "W", "육" if hs.degree(i) == 6 else "오"])
+	lines.append("[color=#c9a75a][font_size=18]%s[/font_size][/color]%s" % [name_, "  [color=#9a917e](고정됨)[/color]" if selected >= 0 else ""])
+	lines.append("[color=#9a917e]위도 %.1f°%s, 경도 %.1f°%s, %s각형 칸[/color]" % [absf(lat), "N" if lat >= 0 else "S", absf(lon), "E" if lon >= 0 else "W", "육" if hs.degree(i) == 6 else "오"])
 	lines.append("")
 	if gen.elevation[i] >= 0.0 and gen.is_lake[i] == 0:
 		lines.append("[b]고도[/b]  %s m, %s" % [_num(hm), WorldGen.RELIEF_NAMES[gen.relief[i]]])
@@ -794,12 +825,12 @@ func _update_info() -> void:
 	if water != "":
 		lines.append("[b]물[/b]  %s" % water)
 	lines.append("")
-	lines.append("[color=#e8c872]타일 레이어[/color]")
+	lines.append("[color=#c9a75a]타일 레이어[/color]")
 	lines.append("[b]1층 지형·기후[/b]  %s" % TileLayers.terrain_text(gen, i))
 	if gen.base[i] == TileLayers.Base.LAND or gen.veg[i] != TileLayers.Veg.NONE:
 		var vtxt: String = TileLayers.VEG_NAMES[gen.veg[i]]
 		if gen.potential_veg[i] != gen.veg[i]:
-			vtxt += " [color=#9f906c](자연 상태: %s)[/color]" % TileLayers.VEG_NAMES[gen.potential_veg[i]]
+			vtxt += " [color=#9a917e](자연 상태: %s)[/color]" % TileLayers.VEG_NAMES[gen.potential_veg[i]]
 		lines.append("[b]2층 식생[/b]  %s" % vtxt)
 	if gen.base[i] == TileLayers.Base.LAND:
 		lines.append("[b]3층 시설물[/b]  %s" % TileLayers.structure_text(gen, i))
