@@ -14,7 +14,6 @@ const L := preload("res://scripts/tile_layers.gd")
 
 const CAMP_MAX_POP := 3
 const CARRY_MAX := 10
-const GATHER_AMOUNT := 3
 const CAMP_MIN_GAP := 2          # 다른 야영지에서 이 칸 수 이내에는 세울 수 없다
 const FOOD_PER_POP := 2          # 야영지 인구 1명이 턴마다 먹는 식량
 const CAMP_BONUS := 1            # 야영지 모닥불: 턴마다 식량 +1
@@ -30,9 +29,11 @@ static func growth_need(pop: int) -> int:
 enum Res { NONE, WHEAT, RICE, BERRY, FISH, SHELL }
 const RES_NAMES := ["", "야생 밀", "야생 쌀", "나무 열매", "물고기", "조개"]
 const RES_SHORT := ["", "밀", "쌀", "열매", "물고기", "조개"]
-const RES_MAX := [0, 12, 12, 8, 10, 8]
+## 한 번 채집하면 그 자리의 양을 모두 거둔다 (한 턴에 끝). 야생 곡물은 사냥감(사슴 6, 멧돼지 8, 들소 12)보다
+## 훨씬 적게 주는 대신 위험이 없다. 다 거둔 곳은 REGROW_TURNS 턴 뒤에 다시 차오른다.
+const RES_MAX := [0, 3, 3, 2, 4, 2]
+const REGROW_TURNS := [0, 12, 12, 8, 6, 8]
 const RES_COLORS := [Color(0, 0, 0), Color("e6c34a"), Color("f2eedc"), Color("b0466e"), Color("4aa3e0"), Color("e89a8a")]
-const REGROW_EVERY := 2          # 이 턴마다 1씩 다시 자란다
 
 
 # ---------------------------------------------------------------- 유닛 종류
@@ -89,6 +90,7 @@ var rng := RandomNumberGenerator.new()
 var turn: int = 1
 var res_kind := PackedByteArray()
 var res_amt := PackedByteArray()
+var res_wait := PackedByteArray()   # 다 거둔 자원이 다시 차오르기까지 남은 턴
 var units: Array = []            # Unit
 var occ := {}                    # 칸 -> 그 칸의 유닛들 (Array)
 var camps: Array = []            # Camp
@@ -107,6 +109,7 @@ func setup(world: WorldGen, seed_v: int) -> void:
 	rng.seed = seed_v
 	res_kind.resize(gen.n)
 	res_amt.resize(gen.n)
+	res_wait.resize(gen.n)
 	_place_resources()
 	_pick_start()
 	_place_animals()
@@ -597,7 +600,7 @@ func gather_block_reason(u: Unit) -> String:
 	if gather_target(u) < 0:
 		var t: int = u.tile
 		if res_kind[t] != Res.NONE:
-			return "%s 고갈됨 (다시 자라는 중)" % josa(RES_NAMES[res_kind[t]], "이")
+			return "%s 다 거둠 (%d턴 뒤 다시 자람)" % [josa(RES_NAMES[res_kind[t]], "은"), res_wait[t]]
 		return "이 칸이나 둘레 물가에 채집할 식량이 없음"
 	return ""
 
@@ -607,8 +610,9 @@ func gather(u: Unit) -> int:
 	if gather_block_reason(u) != "":
 		return 0
 	var t: int = gather_target(u)
-	var got: int = mini(mini(GATHER_AMOUNT, res_amt[t]), CARRY_MAX - u.carry)
-	res_amt[t] -= got
+	var got: int = mini(res_amt[t], CARRY_MAX - u.carry)
+	res_amt[t] = 0
+	res_wait[t] = REGROW_TURNS[res_kind[t]]
 	u.carry += got
 	u.mp = 0
 	u.acted = true
@@ -616,7 +620,7 @@ func gather(u: Unit) -> int:
 	var c: Camp = camp_at(u.tile)
 	if c != null:
 		_deposit(u, c)
-	note("%s 식량 %d 채집했습니다 (남은 양 %d)." % [RES_NAMES[res_kind[t]], got, res_amt[t]])
+	note("%s 식량 %d 거뒀습니다 (%d턴 뒤 다시 자람)." % [RES_NAMES[res_kind[t]] + "에서", got, res_wait[t]])
 	return got
 
 
@@ -973,11 +977,11 @@ func _predator_act(u: Unit) -> void:
 
 
 func _regrow() -> void:
-	if turn % REGROW_EVERY == 0:
-		for i in gen.n:
-			var r: int = res_kind[i]
-			if r != Res.NONE and res_amt[i] < RES_MAX[r]:
-				res_amt[i] += 1
+	for i in gen.n:
+		if res_wait[i] > 0:
+			res_wait[i] -= 1
+			if res_wait[i] == 0:
+				res_amt[i] = RES_MAX[res_kind[i]]
 	var missing: int = animal_target - count_animals()
 	if missing > 0:
 		var want: int = maxi(1, missing / 10)
