@@ -153,10 +153,12 @@ void fragment() {
 ## 세로축은 카메라 위쪽과 지면의 위쪽을 섞어서, 내려다볼 때도 납작해지지 않게 한다.
 const SPRITE_SHADER := """
 shader_type spatial;
-render_mode cull_disabled;
+render_mode cull_disabled, depth_prepass_alpha;
 uniform sampler2D atlas : source_color, filter_linear_mipmap_anisotropic;
 uniform float near_d = 0.6;
 uniform float far_d = 0.9;
+uniform float px_scale = 1236.0;
+varying float fade;
 void vertex() {
 	vec3 anchor = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	vec3 up = normalize(anchor);
@@ -165,7 +167,13 @@ void vertex() {
 	vec3 vaxis = normalize(cam_up + up * 0.9);
 	vec3 haxis = normalize(cross(vaxis, cross(cam_right, vaxis)) + cam_right * 0.001);
 	float d = length(anchor - CAMERA_POSITION_WORLD);
-	float k = 1.0 - smoothstep(near_d, far_d, d);
+	// 멀어질 때 그림을 점으로 줄이면 몇 픽셀짜리 검은 점이 반짝이는 노이즈가 된다.
+	// 크기는 조금만 줄이고(최소 70%), 대신 투명도로 서서히 사라지게 한다.
+	fade = 1.0 - smoothstep(near_d, far_d, d);
+	// 작은 그림(덤불, 돌, 풀포기)은 칸보다 먼저 몇 픽셀로 작아진다. 화면에서 8~14px 아래로 작아지면 따로 사라지게 한다.
+	float spx = 2.0 * abs(UV2.x) * px_scale / max(d, 1e-4);
+	fade *= smoothstep(8.0, 14.0, spx);
+	float k = step(0.001, fade) * mix(0.7, 1.0, fade);
 	vec3 wp = anchor + (haxis * UV2.x + vaxis * UV2.y) * k + up * 0.0008;
 	VERTEX = (inverse(MODEL_MATRIX) * vec4(wp, 1.0)).xyz;
 	NORMAL = (inverse(MODEL_MATRIX) * vec4(normalize(up * 0.5 + normalize(INV_VIEW_MATRIX[2].xyz) * 0.5), 0.0)).xyz;
@@ -173,14 +181,39 @@ void vertex() {
 void fragment() {
 	vec4 t = texture(atlas, UV);
 	ALBEDO = t.rgb * COLOR.rgb;
-	ALPHA = t.a;
-	ALPHA_SCISSOR_THRESHOLD = 0.5;
+	// 가까이서는 테두리를 또렷하게 (0.5 기준으로 자름), 멀어지며 전체가 옅어진다
+	float a = smoothstep(0.35, 0.6, t.a);
+	ALPHA = a * fade;
 	EMISSION = t.rgb * COLOR.rgb * 0.18;
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.05;
 }
 """
 var _sprite_mat := ShaderMaterial.new()
+
+## 세운 그림의 그림자: 그림과 같은 기준(UV2.x = 그림 폭)으로 작아지면 함께 사라진다.
+const SHADOW_SHADER := """
+shader_type spatial;
+render_mode cull_disabled, depth_draw_never;
+uniform sampler2D atlas : source_color, filter_linear_mipmap_anisotropic;
+uniform float near_d = 0.6;
+uniform float far_d = 0.9;
+uniform float px_scale = 1236.0;
+varying float fade;
+void vertex() {
+	vec3 wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	float d = length(wp - CAMERA_POSITION_WORLD);
+	fade = (1.0 - smoothstep(near_d, far_d, d)) * smoothstep(8.0, 14.0, UV2.x * px_scale / max(d, 1e-4));
+}
+void fragment() {
+	vec4 t = texture(atlas, UV);
+	ALBEDO = t.rgb * COLOR.rgb;
+	ALPHA = t.a * COLOR.a * fade;
+	ROUGHNESS = 1.0;
+	SPECULAR = 0.05;
+}
+"""
+var _shadow_mat := ShaderMaterial.new()
 ## 그림이 보이기 시작하는 화면 위 칸 크기 (px, 화면 높이 900 기준). 이보다 작으면 흐려지다 사라진다.
 const ART_MIN_PX := 26.0
 const ART_FULL_PX := 40.0
@@ -307,6 +340,12 @@ void fragment() {
 		mi.material_override = m
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
+	var shsh := Shader.new()
+	shsh.code = SHADOW_SHADER
+	_shadow_mat.shader = shsh
+	_shadow_mat.set_shader_parameter("atlas", tile_art.decals.texture)
+	_shadow_mat.render_priority = (art_shadow_mi.material_override as StandardMaterial3D).render_priority
+	art_shadow_mi.material_override = _shadow_mat
 	var ssh := Shader.new()
 	ssh.code = SPRITE_SHADER
 	_sprite_mat.shader = ssh
@@ -1010,6 +1049,10 @@ func _build_art() -> void:
 			m.distance_fade_max_distance = near_d
 	_sprite_mat.set_shader_parameter("near_d", near_d)
 	_sprite_mat.set_shader_parameter("far_d", far_d)
+	_sprite_mat.set_shader_parameter("px_scale", px_per_unit)
+	_shadow_mat.set_shader_parameter("near_d", near_d)
+	_shadow_mat.set_shader_parameter("far_d", far_d)
+	_shadow_mat.set_shader_parameter("px_scale", px_per_unit)
 	_surface_mat.set_shader_parameter("near_d", near_d)
 	_surface_mat.set_shader_parameter("far_d", far_d)
 	# 바닥 무늬 한 장이 칸 두 개쯤을 덮도록
@@ -1038,7 +1081,7 @@ func _build_art() -> void:
 	art_veg_mi.mesh = veg.mesh()
 	art_road_mi.mesh = road.mesh()
 	art_struct_mi.mesh = st.mesh()
-	art_shadow_mi.mesh = shadow.mesh()
+	art_shadow_mi.mesh = shadow.mesh(true)
 	art_sprite_mi.mesh = spr.mesh(true)
 
 
@@ -1249,6 +1292,7 @@ func _art_sprite(buf: _ArtBuf, shadow: _ArtBuf, i: int, key: String, x: float, y
 			shadow.nrm.append(up)
 			shadow.col.append(Color.WHITE)
 			shadow.uv.append(tile_art.decals.uv("decal/shadow", corner.x, corner.y))
+			shadow.uv2.append(Vector2(w, 0.0))
 		shadow.tri(sb, sb + 2, sb + 1)
 		shadow.tri(sb, sb + 3, sb + 2)
 

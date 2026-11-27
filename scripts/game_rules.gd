@@ -1,4 +1,3 @@
-class_name GameRules
 extends RefCounted
 ## 채집 → 인구 상승 → 사냥(야생동물과 전투) → 식량 → 인구 상승 순환의 규칙.
 ## 화면과 떨어져 있어서 headless 점검(tools/game_check.gd)으로 바로 돌려 볼 수 있다.
@@ -67,13 +66,13 @@ class Unit:
 	var path: Array = []         # 목적지까지 남은 칸들 (여러 턴에 걸친 이동)
 
 	func info() -> Dictionary:
-		return GameRules.KINDS[kind]
+		return KINDS[kind]
 
 	func side() -> int:
-		return GameRules.KINDS[kind]["side"]
+		return KINDS[kind]["side"]
 
 	func name() -> String:
-		return GameRules.KINDS[kind]["name"]
+		return KINDS[kind]["name"]
 
 
 class Camp:

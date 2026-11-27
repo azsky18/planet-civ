@@ -2,6 +2,8 @@ extends SceneTree
 ## 채집·인구 순환 규칙 점검: godot --headless -s tools/game_check.gd
 ## 시작 배치, 야영지, 채집, 성장, 내보내기, 전투 확률, 턴 진행을 돌려 보고 기대와 다르면 FAIL 을 찍는다.
 
+const GameRules := preload("res://scripts/game_rules.gd")
+
 var fails: int = 0
 
 
