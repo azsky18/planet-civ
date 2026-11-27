@@ -14,6 +14,8 @@ var sel_camp: GameRules.Camp = null
 
 var _unit_nodes := {}            # unit id -> Node3D
 var _res_nodes := {}             # tile -> [Node3D, Label3D, 마지막 양]
+var _camp_labels := {}           # 칸 -> Label3D (야영지 이름)
+var _font_bold: Font
 var _tag_nodes := {}             # 칸 -> Label3D (야영지·부족민 이름표)
 var _mats := {}
 var _labels: Array = []          # 깊이 검사를 끈 글자와 체력 막대 (뒤쪽 숨김 대상)
@@ -36,6 +38,7 @@ var over_lbl := Label.new()
 func _ready() -> void:
 	font_body = load("res://fonts/NanumGothic-Regular.ttf")
 	font_title = load("res://fonts/NanumMyeongjo-ExtraBold.ttf")
+	_font_bold = load("res://fonts/NanumGothic-Bold.ttf")
 	_setup_scene()
 	add_child(marks)
 	_setup_rings()
@@ -211,13 +214,14 @@ func _frame(pos: Vector3) -> Transform3D:
 	return Transform3D(Basis(x, up, z), pos)
 
 
-func _label(text: String, col: Color, size: int, range_end: float) -> Label3D:
+## 지도 위 글자: 문명 시리즈처럼 작고 차분하게. 얇은 어두운 외곽선만 두른다.
+func _label(text: String, col: Color, size: int, range_end: float, font: Font = null) -> Label3D:
 	var l := Label3D.new()
 	l.text = text
-	l.font = font_body
+	l.font = font if font != null else font_body
 	l.font_size = size
-	l.outline_size = 10
-	l.outline_modulate = Color(0, 0, 0, 0.85)
+	l.outline_size = 8
+	l.outline_modulate = Color(0.07, 0.06, 0.04, 0.95)
 	l.modulate = col
 	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	l.fixed_size = true
@@ -329,8 +333,9 @@ func _sync_marks(full: bool = false) -> void:
 				head.visibility_range_end = 1.2
 				node.add_child(head)
 			if u.side() != GameRules.Side.PLAYER:
-				var col: Color = Color("d8f0b0") if u.side() == GameRules.Side.PREY else Color("ffb3a6")
-				var lbl := _label("", col, 24, 0.32)
+				var col: Color = Color("d9d0b8") if u.side() == GameRules.Side.PREY else Color("e3a493")
+				var lbl := _label("", col, 16, 0.32)
+				lbl.offset = Vector2(0, 16)   # 체력 막대 위로
 				lbl.position = Vector3(0, hs.spacing * 0.4, 0)
 				lbl.name = "label"
 				node.add_child(lbl)
@@ -397,8 +402,19 @@ func _sync_marks(full: bool = false) -> void:
 	# 야영지와 부족민이 있는 칸: 이름표 하나에 모아 쓴다 (겹치지 않게)
 	var tags := {}
 	for c in rules.camps:
-		var dots: String = "●".repeat(c.pop) + "○".repeat(GameRules.CAMP_MAX_POP - c.pop)
-		tags[c.tile] = ["%s %s  식량 %d/%d" % [c.name, dots, c.food, GameRules.growth_need(c.pop)]]
+		var cl: Label3D = _camp_labels.get(c.tile)
+		if cl == null:
+			cl = _label("", Color("f3e4b6"), 19, 1.0, _font_bold)
+			cl.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+			cl.transform = _frame(_ground(c.tile))
+			cl.position += cl.transform.basis.y * hs.spacing * 0.05
+			marks.add_child(cl)
+			_camp_labels[c.tile] = cl
+		cl.text = "%s  인구 %d/%d · 식량 %d/%d" % [c.name, c.pop, GameRules.CAMP_MAX_POP, c.food, GameRules.growth_need(c.pop)]
+	for t in _camp_labels.keys():
+		if rules.camp_at(t) == null:
+			_camp_labels[t].queue_free()
+			_camp_labels.erase(t)
 	for u in rules.player_units():
 		if not tags.has(u.tile):
 			tags[u.tile] = []
@@ -422,7 +438,7 @@ func _sync_marks(full: bool = false) -> void:
 	for t in tags:
 		var lbl: Label3D = _tag_nodes.get(t)
 		if lbl == null:
-			lbl = _label("", Color("ffe9a8"), 24, 1.0)
+			lbl = _label("", Color("e6e8ea"), 16, 1.0)
 			# 칸 가운데에서 화면 아래쪽으로 늘어지게 (문명 시리즈의 도시 이름처럼 칸 아래에)
 			lbl.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 			lbl.transform = _frame(_ground(t))
@@ -430,7 +446,8 @@ func _sync_marks(full: bool = false) -> void:
 			marks.add_child(lbl)
 			_tag_nodes[t] = lbl
 		lbl.text = "\n".join(tags[t])
-		lbl.modulate = Color("ffe9a8") if rules.camp_at(t) != null else Color("cfe0ff")
+		# 야영지 이름 아래 줄에 오도록 (화면 픽셀 기준으로 내림)
+		lbl.offset = Vector2(0, -22) if rules.camp_at(t) != null else Vector2.ZERO
 	var sig: String = str(rules.camp_tiles.keys())
 	if sig != _camp_sig:
 		_camp_sig = sig
