@@ -52,7 +52,6 @@ func _init() -> void:
 	check(camp != null and camp.pop == 1, "야영지 설치, 인구 1")
 	check(gr.population() == 2, "설치해도 총 인구 그대로 (유닛 1 = 인구 1)")
 	check(gr.camp_block_reason(b) != "", "같은 칸에 또 설치 불가")
-	check(gr.release_block_reason(camp) != "", "인구 1이면 내보내기 불가")
 
 	# 채집: 가까운 식량 칸으로 가서 모아 오기
 	var res_tile: int = -1
@@ -102,6 +101,23 @@ func _init() -> void:
 		print(msg)
 		check(msg != "", "곁의 동물을 누르면 공격")
 		check(not gr.units.has(deer) or not gr.units.has(hunter), "전투 뒤 한쪽이 쓰러짐")
+
+	# 인구 1 야영지에서 내보내면 야영지가 사라진다
+	var lone := gr.spawn("tribe", camp.tile)
+	var far: int = -1
+	for j in gr.within(camp.tile, 6):
+		if gr.is_land(j) and gr.unit_at(j) == null and gr.within(j, 2).keys().all(func(t): return gr.camp_at(t) == null):
+			far = j
+			break
+	if far >= 0:
+		gr._move_to(lone, far)
+		lone.carry = 4
+		var c2 = gr.found_camp(lone)
+		var before: int = gr.population()
+		var out = gr.release_unit(c2)
+		check(out != null and gr.camp_at(far) == null and not gr.camps.has(c2), "인구 1 야영지에서 내보내면 야영지가 사라짐")
+		check(gr.population() == before, "야영지가 사라져도 총 인구 그대로")
+		check(out.carry == 4, "창고 식량을 들고 나옴")
 
 	# 턴 여러 번 돌려도 오류 없이 동물 수 유지
 	for _t in 30:
