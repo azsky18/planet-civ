@@ -915,26 +915,29 @@ func _disc(pos: PackedVector3Array, idx: PackedInt32Array, c: Vector3, nrm: Vect
 		idx.append_array([s, s + 1 + k, s + 1 + (k + 1) % 16])
 
 
-## 타일 경계선. 육지 위에만 그린다. 1 픽셀 선은 바닥 그림에 묻혀 안 보이므로 얇은 띠로 그린다.
+## 타일 경계선. 바다, 호수를 포함한 모든 칸에 그린다 (물 위에서는 수면 높이로 올린다).
+## 1 픽셀 선은 바닥 그림에 묻혀 안 보이므로 얇은 띠로 그린다.
 func _build_grid() -> void:
 	var pos := PackedVector3Array()
 	var idx := PackedInt32Array()
 	var lift: float = 0.0012
 	var w: float = hs.spacing * 0.03
+	var F: int = hs.face_centers.size()
+	# 꼭짓점마다 한 번만: 지형 높이와 그 꼭짓점에 닿은 물 칸의 수면 중 높은 쪽
+	var cpos := PackedVector3Array()
+	cpos.resize(F)
+	for f in F:
+		var tiles: Array = [hs.face_tiles[f * 3], hs.face_tiles[f * 3 + 1], hs.face_tiles[f * 3 + 2]]
+		var p: Vector3 = _lifted(_face_pos(f), tiles)
+		cpos[f] = p + p.normalized() * lift
 	for i in hs.count:
 		var off: int = hs.nb_offsets[i]
 		var deg: int = hs.degree(i)
-		var land_i: bool = gen.elevation[i] >= 0.0 and gen.is_lake[i] == 0
 		for k in deg:
 			var j: int = hs.nb_list[off + k]
 			if j < i:
 				continue
-			var land_j: bool = gen.elevation[j] >= 0.0 and gen.is_lake[j] == 0
-			if not (land_i or land_j):
-				continue
-			var a: Vector3 = corner_pos(off + k)
-			var b: Vector3 = corner_pos(off + (k + 1) % deg)
-			_ribbon(pos, idx, a + a.normalized() * lift, b + b.normalized() * lift, w)
+			_ribbon(pos, idx, cpos[hs.corner_face[off + k]], cpos[hs.corner_face[off + (k + 1) % deg]], w)
 	var m := ArrayMesh.new()
 	if pos.size() > 0:
 		var arr: Array = []
