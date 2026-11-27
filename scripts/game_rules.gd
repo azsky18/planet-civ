@@ -41,7 +41,7 @@ const RES_COLORS := [Color(0, 0, 0), Color("e6c34a"), Color("f2eedc"), Color("b0
 enum Side { PLAYER, PREY, PREDATOR }
 ## a 공격, d 방어, hp 체력, mp 이동력, food 사냥했을 때 얻는 식량, aggro 곁에 있을 때 덮칠 확률
 const KINDS := {
-	"tribe": {"name": "부족민", "side": Side.PLAYER, "a": 1, "d": 1, "hp": 3, "mp": 2, "food": 0, "aggro": 0.0},
+	"tribe": {"name": "부족민", "side": Side.PLAYER, "a": 2, "d": 2, "hp": 3, "mp": 2, "food": 0, "aggro": 0.0},
 	"deer": {"name": "사슴", "side": Side.PREY, "a": 0, "d": 1, "hp": 2, "mp": 2, "food": 6, "aggro": 0.0},
 	"bison": {"name": "들소", "side": Side.PREY, "a": 0, "d": 2, "hp": 3, "mp": 1, "food": 12, "aggro": 0.0},
 	"boar": {"name": "멧돼지", "side": Side.PREY, "a": 0, "d": 2, "hp": 2, "mp": 1, "food": 8, "aggro": 0.0},
@@ -96,6 +96,7 @@ var occ := {}                    # 칸 -> 그 칸의 유닛들 (Array)
 var camps: Array = []            # Camp
 var camp_tiles := {}             # 칸 -> Camp
 var events: Array = []              # 최근 사건 (문자열)
+var fights: Array = []              # 아직 화면에 보여 주지 않은 전투 기록 (game.gd 가 한 합씩 재생하고 비운다)
 var start_tile: int = -1
 var animal_target: int = 0
 var _next_id: int = 1
@@ -805,14 +806,21 @@ func attack(att: Unit, def: Unit) -> String:
 	var d: float = defense_of(def)
 	var p: float = a / (a + d)
 	var rounds: int = 0
+	# 화면에서 한 합씩 보여 주도록 합마다 누가 맞았는지 남긴다 (true = 방어 쪽이 한 칸 깎임)
+	var fight := {"att": att.id, "def": def.id, "att_tile": att.tile, "def_tile": def.tile,
+			"att_hp": att.hp, "def_hp": def.hp, "rounds": []}
 	while att.hp > 0 and def.hp > 0 and rounds < 100:
 		rounds += 1
-		if rng.randf() < p:
+		var hit: bool = rng.randf() < p
+		fight["rounds"].append(hit)
+		if hit:
 			def.hp -= 1
 		else:
 			att.hp -= 1
+	fights.append(fight)
 	att.mp = maxi(att.mp - 1, 0)
 	att.acted = true
+	def.acted = true   # 공격받은 턴은 쉰 것으로 치지 않는다
 	att.path.clear()
 	var msg: String
 	var winner: Unit = att if def.hp <= 0 else def
@@ -995,9 +1003,8 @@ func _regrow() -> void:
 func _start_player_turn() -> void:
 	for u in player_units():
 		var full: int = u.info()["hp"]
-		if camp_at(u.tile) != null:
-			u.hp = full
-		elif not u.acted:
+		# 제자리에서 쉬면 (이번 턴에 움직이지도 싸우지도 채집하지도 않았으면) 한 턴에 한 칸이 찬다
+		if not u.acted:
 			u.hp = mini(u.hp + 1, full)
 		u.mp = u.info()["mp"]
 		u.acted = false

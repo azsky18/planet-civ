@@ -114,6 +114,15 @@ func _init() -> void:
 		print(msg)
 		check(msg != "", "곁의 동물을 누르면 공격")
 		check(not gr.units.has(deer) or not gr.units.has(hunter), "전투 뒤 한쪽이 쓰러짐")
+		check(not gr.fights.is_empty() and gr.fights[-1]["rounds"].size() >= 2, "전투가 합마다 기록됨 (화면에서 한 칸씩 깎임)")
+		gr.fights.clear()
+
+	# 쉬면 한 턴에 한 칸 회복 (야영지 안에서도 한 칸)
+	var rest: GameRules.Unit = gr.spawn("tribe", camp.tile)
+	rest.hp = 1
+	gr.end_turn()
+	check(rest.hp == 2, "쉰 부족민은 한 턴에 체력 한 칸 회복")
+	check(GameRules.KINDS["tribe"]["a"] == 2 and GameRules.KINDS["tribe"]["d"] == 2 and GameRules.KINDS["tribe"]["mp"] == 2, "부족민 2/2/2")
 
 	# 인구 1 야영지에서 내보내면 야영지가 사라진다
 	var lone := gr.spawn("tribe", camp.tile)
