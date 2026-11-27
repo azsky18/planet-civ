@@ -5,7 +5,7 @@ const LEVELS := [5, 6, 7]
 const LEVEL_LABELS := ["작게 (10,242칸)", "보통 (40,962칸)", "크게 (163,842칸, 느림)"]
 const MODE_LABELS := ["지형", "고도", "기온", "강수량", "판 구조", "기압과 바람", "식생"]
 ## 화면에 표시되는 빌드 이름. PC에서 어떤 버전이 실행 중인지 확인하는 용도.
-const BUILD := "v7.9 바다·호수·강에도 격자"
+const BUILD := "v8.0 시작 화면, 채집·인구 순환"
 const COMPASS := ["북", "북동", "동", "남동", "남", "남서", "서", "북서"]
 
 var hs := HexSphere.new()
@@ -238,6 +238,10 @@ func _setup_ui() -> void:
 	sub.add_theme_font_size_override("font_size", 12)
 	sub.add_theme_color_override("font_color", Color("b9a67c"))
 	lv.add_child(sub)
+	var menu_btn := Button.new()
+	menu_btn.text = "메뉴로 (Esc)"
+	menu_btn.pressed.connect(func(): get_tree().change_scene_to_file("res://main.tscn"))
+	lv.add_child(menu_btn)
 	lv.add_child(HSeparator.new())
 
 	var seed_row := HBoxContainer.new()
@@ -571,7 +575,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			_pick(mm.position)
 	elif event is InputEventKey and event.pressed and not event.echo:
 		var kc: int = (event as InputEventKey).keycode
-		if kc == KEY_R:
+		if kc == KEY_ESCAPE:
+			get_tree().change_scene_to_file("res://main.tscn")
+		elif kc == KEY_R:
 			pitch = -0.35
 			heading = 0.0
 			_update_camera()
